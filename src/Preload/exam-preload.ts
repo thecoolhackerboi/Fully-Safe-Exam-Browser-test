@@ -66,6 +66,18 @@ try {
           if (hasModifier && (CLIPBOARD_KEYS.has(keyLower) || keyLower === 'alt')) {
             shouldNeutralize = !isEditor;
           }
+          // Protect Shift + Arrow text selection outside code editors
+          const isArrowNav =
+            keyLower.startsWith('arrow') ||
+            keyLower === 'down' ||
+            keyLower === 'up' ||
+            keyLower === 'left' ||
+            keyLower === 'right' ||
+            keyLower === 'home' ||
+            keyLower === 'end';
+          if (evt.shiftKey && isArrowNav) {
+            shouldNeutralize = !isEditor;
+          }
         }
 
         if (shouldNeutralize) {
@@ -155,12 +167,36 @@ try {
 (function() {
   'use strict';
 
-  // 1. Force text selectable everywhere (in editor, problem description, tasks, etc.)
-  // and hide any "Ask AI" / "Chef AI" buttons on exam platforms without mutating React DOM trees
+  // 1. Force text selectable on content (in editor, problem description, tasks, etc.)
+  // while protecting splitters, gutters, resizers, and containers from breaking layout
   var style = document.createElement('style');
   style.id = 'fseb-clipboard-styles';
   style.textContent = [
-    '*, *::before, *::after { -webkit-user-select: text !important; user-select: text !important; -moz-user-select: text !important; -ms-user-select: text !important; }',
+    'body, p, span, h1, h2, h3, h4, h5, h6, li, ol, ul, table, tr, td, th, tbody, thead, tfoot, pre, code, blockquote, em, strong, b, i, q, s, sub, sup, label, dd, dt, dl, article, section, main, [class*="problem" i], [class*="statement" i], [class*="description" i], [class*="question" i], [class*="markdown" i], [class*="math" i], [class*="katex" i], [class*="text" i], [class*="content" i], .problem-statement, .problem-description, .statement, .description {',
+    '  -webkit-user-select: text !important;',
+    '  user-select: text !important;',
+    '  -moz-user-select: text !important;',
+    '}',
+    '.gutter, .resizer, .splitter, .separator, [class*="gutter" i], [class*="resizer" i], [class*="splitter" i], [class*="separator" i], [role="separator"], [class*="drag" i], button, input[type="button"], input[type="submit"], svg, svg * {',
+    '  -webkit-user-select: none !important;',
+    '  user-select: none !important;',
+    '  -moz-user-select: none !important;',
+    '}',
+    '.split-pane, .split-pane-item, .split-flex, .split-horizontal, [class*="split" i], [class*="pane" i], [class*="layout" i] {',
+    '  flex-wrap: nowrap !important;',
+    '}',
+    '.gutter, .resizer, .splitter, [class*="gutter" i], [class*="resizer" i], [class*="splitter" i] {',
+    '  flex-shrink: 0 !important;',
+    '  box-sizing: border-box !important;',
+    '}',
+    '.monaco-editor, .monaco-editor .overflow-guard, .monaco-editor .monaco-scrollable-element, .monaco-editor .scrollbar, .monaco-editor .decorationsOverviewRuler, .monaco-editor .margin, .monaco-editor .glyph-margin, .monaco-editor .line-numbers {',
+    '  -webkit-user-select: none !important;',
+    '  user-select: none !important;',
+    '}',
+    '.monaco-editor .view-line, .monaco-editor textarea {',
+    '  -webkit-user-select: text !important;',
+    '  user-select: text !important;',
+    '}',
     'button[id*="ask-ai" i], button[class*="ask-ai" i],',
     'button[id*="chef-ai" i], button[class*="chef-ai" i],',
     'button[id*="askAi" i], button[class*="askAi" i],',
@@ -233,6 +269,8 @@ try {
         autoIndent: 'keep',      // Keeps original code indentation without compounding
         formatOnPaste: false,    // Disables conflicting auto-formatting on paste
         trimAutoWhitespace: true,
+        automaticLayout: true,   // Adapts to dynamic split resizing and avoids container expansion
+        scrollBeyondLastLine: false,
       });
     } catch (e) {}
   }
@@ -393,6 +431,18 @@ try {
           var k = (evt.key || '').toLowerCase();
           var mod = evt.ctrlKey || evt.metaKey || evt.altKey;
           if (mod && CLIP_KEYS[k]) {
+            neutralize = !isEditor;
+          }
+          // Protect Shift + Arrow text selection outside code editors
+          var isArrow =
+            k.indexOf('arrow') === 0 ||
+            k === 'down' ||
+            k === 'up' ||
+            k === 'left' ||
+            k === 'right' ||
+            k === 'home' ||
+            k === 'end';
+          if (evt.shiftKey && isArrow) {
             neutralize = !isEditor;
           }
         }

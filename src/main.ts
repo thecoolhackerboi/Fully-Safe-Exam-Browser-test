@@ -9,6 +9,13 @@ const logger = Logger.getInstance();
 let mainWindow: MainWindow | null = null;
 let examSession: ExamSession | null = null;
 
+// Explicitly set application identity and AppUserModelId for Windows taskbar & OS
+app.name = 'FSEB';
+app.setName('FSEB');
+if (process.platform === 'win32') {
+  app.setAppUserModelId('org.fseb.browser');
+}
+
 // Initialize file logging
 logger.initialize();
 

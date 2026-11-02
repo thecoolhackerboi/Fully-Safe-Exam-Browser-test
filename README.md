@@ -80,6 +80,12 @@ npm run build
 ```
 This command runs `tsc` (TypeScript compiler) and copies necessary HTML/CSS UI assets to the `dist` directory.
 
+To generate the authentic `FSEB.exe` executable on Windows:
+```bash
+npm run pack
+```
+This packages the standalone `FSEB.exe` into `release/win-unpacked/` so that Windows, Chrome, Edge, and the Taskbar recognize the application as **FSEB** instead of the generic development Electron runtime.
+
 ---
 
 ## 5. Run the project

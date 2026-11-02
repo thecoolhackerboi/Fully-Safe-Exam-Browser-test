@@ -37,6 +37,7 @@ export class MainWindow {
 
     // Stage 1 (Image 1): Native centered floating splash card over the desktop
     this.splashWindow = new BrowserWindow({
+      title: 'FSEB',
       width: 490,
       height: 255,
       frame: false,
@@ -62,6 +63,7 @@ export class MainWindow {
 
     // Main window for Stages 2, 3, 4, 5, 6
     this.window = new BrowserWindow({
+      title: 'FSEB — Fully Safe Exam Browser',
       width: 1024,
       height: 768,
       minWidth: 800,

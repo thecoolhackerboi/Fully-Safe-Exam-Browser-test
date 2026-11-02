@@ -5,8 +5,6 @@ import { BrowserHost } from '../Browser/BrowserHost';
 import { SebLoader } from '../Configuration/SebLoader';
 import { AppConfiguration } from '../Core/AppConfiguration';
 import { Logger } from '../Core/Logger';
-import { GeminiService } from '../AI/GeminiService';
-import { GeminiExtensionManager } from '../Security/GeminiExtensionManager';
 
 export class MainWindow {
   private static readonly logger = Logger.getInstance();
@@ -116,16 +114,6 @@ export class MainWindow {
     // Load initial UI shell
     const viewPath = path.join(__dirname, 'views/index.html');
     this.window.loadFile(viewPath);
-
-    // Load unpacked Gemini extension if authorized by exam policy
-    GeminiExtensionManager.loadIfAuthorized(this.session.getPolicy()).catch(() => {});
-
-    // Listen for Ctrl+Shift+A to toggle AI Assistant panel
-    this.window.webContents.on('before-input-event', (_event, input) => {
-      if (input.type === 'keyDown' && input.control && input.shift && input.key.toLowerCase() === 'a') {
-        this.window?.webContents.send('fseb:ai:toggle-shortcut');
-      }
-    });
 
     // Multi-stage startup sequence coordinator
     this.window.once('ready-to-show', async () => {
@@ -244,15 +232,6 @@ export class MainWindow {
       this.browserHost.show();
       this.session.transitionTo(SessionState.EXAM_RUNNING, { startUrl: config.startUrl });
 
-      const hostWebContents = this.browserHost.getWebContents();
-      if (hostWebContents) {
-        hostWebContents.on('before-input-event', (_event, input) => {
-          if (input.type === 'keyDown' && input.control && input.shift && input.key.toLowerCase() === 'a') {
-            this.window?.webContents.send('fseb:ai:toggle-shortcut');
-          }
-        });
-      }
-
       await this.browserHost.loadExamUrl(config.startUrl);
       return true;
     } catch (err: unknown) {
@@ -332,45 +311,6 @@ export class MainWindow {
       };
     });
 
-    // AI Screen Analysis handlers
-    ipcMain.handle('fseb:ai:capture-and-analyze', async (_event, options) => {
-      const policy = this.session.getPolicy().getAiPolicy();
-      if (!policy.enabled) {
-        return { success: false, error: 'AI Assistant is disabled by exam configuration policy.' };
-      }
-
-      let imageBuffer: Buffer | undefined;
-      if (options.includeScreen !== false && policy.screenshots) {
-        const screen = await this.browserHost?.captureScreen();
-        if (screen) {
-          imageBuffer = screen.imageBuffer;
-        }
-      }
-
-      let pageText: string | undefined;
-      if (options.includeText !== false && policy.pageContext) {
-        pageText = await this.browserHost?.extractPageText();
-      }
-
-      return await GeminiService.analyzeScreen({
-        apiKey: options.apiKey,
-        provider: options.provider || 'gemini',
-        model: options.model || policy.defaultModel || 'gemini-2.0-flash',
-        customEndpoint: options.customEndpoint,
-        prompt: options.prompt,
-        imageBuffer,
-        pageText,
-      });
-    });
-
-    ipcMain.handle('fseb:ai:capture-preview', async () => {
-      const screen = await this.browserHost?.captureScreen();
-      return screen ? `data:image/jpeg;base64,${screen.base64}` : null;
-    });
-
-    ipcMain.handle('fseb:ai:toggle-panel', async (_event, { isOpen, width }) => {
-      this.browserHost?.setSidePanelWidth(isOpen ? (width || 420) : 0);
-    });
   }
 
   public async showQuitConfirmation(): Promise<void> {

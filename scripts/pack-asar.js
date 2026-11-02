@@ -7,6 +7,11 @@ async function main() {
   const stageDir = path.join(rootDir, 'build-staging');
   const targetAsar = path.join(rootDir, 'release', 'win-unpacked', 'resources', 'app.asar');
 
+  if (!fs.existsSync(path.dirname(targetAsar))) {
+    console.log('[pack-asar] Skipping asar update (release/win-unpacked/resources not found).');
+    return;
+  }
+
   console.log('[pack-asar] Preparing staging directory:', stageDir);
 
   if (fs.existsSync(stageDir)) {
@@ -60,3 +65,4 @@ main().catch((err) => {
   console.error('[pack-asar] Error:', err);
   process.exit(1);
 });
+

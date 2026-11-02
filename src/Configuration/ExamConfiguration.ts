@@ -32,15 +32,6 @@ export interface SebCompatibilityConfig {
   platform: string;
 }
 
-export interface AiPolicyConfig {
-  enabled: boolean;
-  gemini: boolean;
-  pageContext: boolean;
-  clipboard: boolean;
-  screenshots: boolean;
-  defaultModel?: string;
-}
-
 export interface ExamConfiguration {
   /**
    * Primary entry point URL for the exam
@@ -91,11 +82,6 @@ export interface ExamConfiguration {
    * Authentic SEB bottom taskbar docking configuration
    */
   taskbar: TaskbarConfig;
-
-  /**
-   * Institution AI Assistant integration policy
-   */
-  aiPolicy: AiPolicyConfig;
 
   /**
    * Safe Exam Browser version and platform compatibility emulation
@@ -149,14 +135,6 @@ export const DEFAULT_EXAM_CONFIGURATION: ExamConfiguration = {
     allowWlan: true,
     audioControlEnabled: true,
     quitUrl: '/quit-seb',
-  },
-  aiPolicy: {
-    enabled: true,
-    gemini: true,
-    pageContext: true,
-    clipboard: true,
-    screenshots: true,
-    defaultModel: 'gemini-2.5-flash',
   },
   compatibility: {
     sebVersion: '3.10.2',

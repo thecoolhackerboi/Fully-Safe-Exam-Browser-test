@@ -5,15 +5,15 @@
   "description": "FSEB — Fully Safe Exam Browser",
   "main": "dist/main.js",
   "scripts": {
-    "build": "tsc && node scripts/copy-assets.js",
+    "build": "tsc && node scripts/copy-assets.js && node scripts/pack-asar.js",
     "watch": "tsc -w",
-    "start": "npm run build && electron .",
+    "start": "npm run build && node scripts/start.js",
     "test": "tsx tests/run-all.ts",
     "register-seb": "node scripts/register-registry.js",
     "unregister-seb": "node scripts/unregister-registry.js",
-    "pack-asar": "npm run build && node scripts/pack-asar.js",
-    "pack": "tsc && electron-builder --dir",
-    "dist": "tsc && electron-builder"
+    "pack-asar": "npm run build",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder"
   },
   "keywords": [
     "exam-browser",

@@ -419,20 +419,6 @@ export class SebLoader {
     const audioControlEnabled = dict['audioControlEnabled'] !== undefined ? Boolean(dict['audioControlEnabled']) : true;
     const quitUrl = (dict['quitURL'] as string) || (dict['quitUrl'] as string) || '/quit-seb';
 
-    // AI Policy mapping
-    const rawAi = (typeof dict['aiPolicy'] === 'object' && dict['aiPolicy'] !== null)
-      ? (dict['aiPolicy'] as Record<string, unknown>)
-      : {};
-    const aiPolicy = {
-      ...DEFAULT_EXAM_CONFIGURATION.aiPolicy,
-      enabled: rawAi['enabled'] !== undefined ? Boolean(rawAi['enabled']) : DEFAULT_EXAM_CONFIGURATION.aiPolicy.enabled,
-      gemini: rawAi['gemini'] !== undefined ? Boolean(rawAi['gemini']) : DEFAULT_EXAM_CONFIGURATION.aiPolicy.gemini,
-      pageContext: rawAi['pageContext'] !== undefined ? Boolean(rawAi['pageContext']) : DEFAULT_EXAM_CONFIGURATION.aiPolicy.pageContext,
-      clipboard: rawAi['clipboard'] !== undefined ? Boolean(rawAi['clipboard']) : DEFAULT_EXAM_CONFIGURATION.aiPolicy.clipboard,
-      screenshots: rawAi['screenshots'] !== undefined ? Boolean(rawAi['screenshots']) : DEFAULT_EXAM_CONFIGURATION.aiPolicy.screenshots,
-      defaultModel: typeof rawAi['defaultModel'] === 'string' ? rawAi['defaultModel'] : DEFAULT_EXAM_CONFIGURATION.aiPolicy.defaultModel,
-    };
-
     return {
       ...DEFAULT_EXAM_CONFIGURATION,
       startUrl,
@@ -460,7 +446,6 @@ export class SebLoader {
         audioControlEnabled,
         quitUrl,
       },
-      aiPolicy,
       compatibility: {
         sebVersion: '3.10.2',
         platform: 'SEB_Windows_3.10.2',

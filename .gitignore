@@ -11,4 +11,4 @@ logs/
 *.suo
 *.seb
 !samples/*.seb
-
+scratch/

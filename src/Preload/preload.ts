@@ -5,23 +5,6 @@ export interface AppInfo {
   version: string;
 }
 
-export interface AiAnalyzeOptions {
-  apiKey: string;
-  provider?: 'gemini' | 'openai' | 'custom';
-  model?: string;
-  customEndpoint?: string;
-  prompt?: string;
-  includeScreen?: boolean;
-  includeText?: boolean;
-}
-
-export interface AiAnalyzeResult {
-  success: boolean;
-  text?: string;
-  error?: string;
-  modelUsed?: string;
-}
-
 export interface FsebAPI {
   openFilePicker: () => Promise<string | null>;
   startExamFromFile: (filePath: string) => Promise<boolean>;
@@ -31,11 +14,6 @@ export interface FsebAPI {
   getAppInfo: () => Promise<AppInfo>;
   onStateUpdate: (callback: (state: string, details?: Record<string, unknown>) => void) => void;
   onShowQuitModal: (callback: () => void) => void;
-  // AI Screen Analysis methods
-  analyzeScreenWithAi: (options: AiAnalyzeOptions) => Promise<AiAnalyzeResult>;
-  capturePreview: () => Promise<string | null>;
-  toggleAiPanel: (isOpen: boolean, width?: number) => Promise<void>;
-  onAiToggleShortcut: (callback: () => void) => void;
 }
 
 const api: FsebAPI = {
@@ -52,14 +30,6 @@ const api: FsebAPI = {
   },
   onShowQuitModal: (callback) => {
     ipcRenderer.on('fseb:show-quit-modal', () => {
-      callback();
-    });
-  },
-  analyzeScreenWithAi: (options: AiAnalyzeOptions) => ipcRenderer.invoke('fseb:ai:capture-and-analyze', options),
-  capturePreview: () => ipcRenderer.invoke('fseb:ai:capture-preview'),
-  toggleAiPanel: (isOpen: boolean, width?: number) => ipcRenderer.invoke('fseb:ai:toggle-panel', { isOpen, width }),
-  onAiToggleShortcut: (callback) => {
-    ipcRenderer.on('fseb:ai:toggle-shortcut', () => {
       callback();
     });
   },

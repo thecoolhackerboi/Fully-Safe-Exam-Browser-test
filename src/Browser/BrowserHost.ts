@@ -18,7 +18,6 @@ export class BrowserHost {
   private readonly parentWindow: BrowserWindow;
   private policy: ExamPolicy;
   private options: BrowserHostOptions;
-  private sidePanelWidth: number = 0;
 
   constructor(options: BrowserHostOptions) {
     this.options = options;
@@ -59,7 +58,6 @@ export class BrowserHost {
       new MenuItem({
         label: 'Paste',
         accelerator: 'CmdOrCtrl+V',
-        role: 'paste',
         click: () => {
           webContents.paste();
         },
@@ -70,7 +68,6 @@ export class BrowserHost {
       new MenuItem({
         label: 'Cut',
         accelerator: 'CmdOrCtrl+X',
-        role: 'cut',
         click: () => {
           webContents.cut();
         },
@@ -81,7 +78,6 @@ export class BrowserHost {
       new MenuItem({
         label: 'Select All',
         accelerator: 'CmdOrCtrl+A',
-        role: 'selectAll',
         click: () => {
           webContents.selectAll();
         },
@@ -94,7 +90,6 @@ export class BrowserHost {
       new MenuItem({
         label: 'Undo',
         accelerator: 'CmdOrCtrl+Z',
-        role: 'undo',
         click: () => {
           webContents.undo();
         },
@@ -105,7 +100,6 @@ export class BrowserHost {
       new MenuItem({
         label: 'Redo',
         accelerator: 'CmdOrCtrl+Y',
-        role: 'redo',
         click: () => {
           webContents.redo();
         },
@@ -241,6 +235,7 @@ export class BrowserHost {
         const k = input.key.toLowerCase();
         if (k === 'v') {
           webContents.paste();
+          event.preventDefault();
           return;
         }
         if (k === 'c') {
@@ -373,6 +368,35 @@ export class BrowserHost {
     });
 
     // 7. Loading lifecycle events
+    webContents.on('dom-ready', () => {
+      webContents.insertCSS(`
+        *, *::before, *::after {
+          -webkit-user-select: text !important;
+          user-select: text !important;
+        }
+        button[id*="ask-ai" i], button[class*="ask-ai" i],
+        button[id*="chef-ai" i], button[class*="chef-ai" i],
+        button[id*="askAi" i], button[class*="askAi" i],
+        button[data-testid*="ask-ai" i], button[data-testid*="chef-ai" i],
+        [aria-label*="Ask AI" i], [aria-label*="Chef AI" i],
+        [title*="Ask AI" i], [title*="Chef AI" i],
+        [id*="ask-ai" i], [id*="chef-ai" i], [class*="ask-ai" i], [class*="chef-ai" i],
+        [id*="askAi" i], [class*="askAi" i], [id*="chefAi" i], [class*="chefAi" i],
+        .ask-ai, .chef-ai, #dock-btn-ai, .seb-taskbar-ai-btn, #seb-ai-drawer, .seb-ai-drawer {
+          display: none !important;
+          visibility: hidden !important;
+          pointer-events: none !important;
+          opacity: 0 !important;
+          width: 0 !important;
+          height: 0 !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          border: 0 !important;
+          overflow: hidden !important;
+        }
+      `).catch(() => {});
+    });
+
     webContents.on('did-start-loading', () => {
       this.options.onLoadingStatusChanged?.(true);
     });
@@ -459,46 +483,8 @@ export class BrowserHost {
   }
 
   /**
-   * Captures the current visible rendered screen of the exam page as a JPEG buffer
-   */
-  public async captureScreen(): Promise<{ imageBuffer: Buffer; base64: string } | null> {
-    if (!this.browserView || !this.browserView.webContents) {
-      return null;
-    }
-    const nativeImg = await this.browserView.webContents.capturePage();
-    const imageBuffer = nativeImg.toJPEG(85);
-    const base64 = imageBuffer.toString('base64');
-    return { imageBuffer, base64 };
-  }
-
-  /**
-   * Safely extracts text content or active selection from the exam page
-   */
-  public async extractPageText(): Promise<string> {
-    if (!this.browserView || !this.browserView.webContents) {
-      return '';
-    }
-    try {
-      const text = await this.browserView.webContents.executeJavaScript(
-        'window.getSelection()?.toString() || document.body?.innerText || ""'
-      );
-      return typeof text === 'string' ? text.slice(0, 5000) : '';
-    } catch {
-      return '';
-    }
-  }
-
-  /**
-   * Sets the width reserved for the AI assistant side panel
-   */
-  public setSidePanelWidth(width: number): void {
-    this.sidePanelWidth = Math.max(0, width);
-    this.resizeToParent();
-  }
-
-  /**
    * Resizes the embedded BrowserView to completely fill the parent window,
-   * reserving space for the authentic SEB bottom taskbar and side panel if enabled.
+   * reserving space for the authentic SEB bottom taskbar if enabled.
    */
   public resizeToParent(): void {
     if (!this.browserView || this.parentWindow.isDestroyed()) return;
@@ -506,12 +492,11 @@ export class BrowserHost {
     const bounds = this.parentWindow.getContentBounds();
     const config = this.policy.getConfiguration();
     const taskbarHeight = config.taskbar?.showTaskBar ? (config.taskbar.taskBarHeight || 36) : 0;
-    const availableWidth = Math.max(300, bounds.width - this.sidePanelWidth);
 
     this.browserView.setBounds({
       x: 0,
       y: 0,
-      width: availableWidth,
+      width: bounds.width,
       height: Math.max(100, bounds.height - taskbarHeight),
     });
   }

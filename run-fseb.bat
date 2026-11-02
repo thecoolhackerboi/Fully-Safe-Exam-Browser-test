@@ -1,5 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
+set ELECTRON_RUN_AS_NODE=
 cd /d "%~dp0"
 title FSEB — Fully Safe Exam Browser
 

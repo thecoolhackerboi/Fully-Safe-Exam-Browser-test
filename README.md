@@ -43,8 +43,8 @@ To clone, build, and run FSEB, you need the following prerequisites installed on
 ## 1. Clone the repository
 
 ```bash
-git clone https://github.com/GARVITAMITBHUTANI/Fully-Safe-Exam-Browser.git
-cd FSEB
+git clone https://github.com/thecoolhackerboi/Fully-Safe-Exam-Browser-test.git
+cd Fully-Safe-Exam-Browser-test
 ```
 
 ---
@@ -99,10 +99,49 @@ This will build the project and launch the application. If you have an exam conf
 
 ---
 
-## 6. Test Website (CodeChef integration)
+## 6. How CodeChef & SEB-Protected Exams Run Seamlessly on FSEB (The Underlying Architecture)
 
-FSEB currently supports `.seb` configurations used by platforms like CodeChef. Because protocol handlers (`seb://`) are registered (via the `npm run register-seb` script or automatically on package installation), you can simulate launching an exam directly from an assessment website. 
-Loading a CodeChef `.seb` file will successfully trigger the exam session, decompress the file, and launch the configured URL.
+When assessment platforms such as **CodeChef**, **Moodle**, or **HackerRank** require an exam to be opened inside **Safe Exam Browser (SEB)**, they employ a multi-layered verification strategy spanning the operating system, HTTP networking, DOM runtime, and security headers. 
+
+FSEB intercepts and satisfies each verification layer seamlessly without requiring the proprietary SEB binary. Here is the hardcore technical breakdown of how this is achieved:
+
+### 1. OS-Level Protocol & File Association Hijacking (Windows Registry Interception)
+* **The Mechanism:** When a user clicks *"Start Exam in Safe Exam Browser"* on CodeChef, the browser does not launch an application directly; rather, it invokes a registered OS URI scheme (`seb://`, `sebs://`, or `seb-config://`) or downloads an XML `.seb` file.
+* **FSEB Implementation:** In `src/Platform/WindowsIntegration.ts`, FSEB registers itself in the Windows User Registry (`HKCU\Software\Classes\seb`, `sebs`, `seb-config`, and `.seb`) as the primary system handler. Windows uses its Shell API (`ShellExecuteExW`) to look up the executable associated with the protocol. FSEB binds these registry keys to point directly to `FSEB.exe` (or the local development runtime), instructing Windows to forward the launch parameters (`"%1"`) into FSEB's process arguments.
+* **Single Instance IPC Routing:** If FSEB is already open, `app.requestSingleInstanceLock()` catches the launch attempt and forwards the new URL/file target across the Electron IPC channel (`second-instance` event) to the running window without spawning duplicate, conflicting windows.
+
+### 2. SEB Protocol De-obfuscation & Plist Parsing Pipeline
+* **The Mechanism:** SEB protocol links are encoded representations of standard web addresses (`sebs://` maps to `https://`, and `seb://` maps to `http://`). `.seb` configuration files are Apple XML Property Lists (Plists) or zlib-compressed/GZIP streams containing exam metadata, start URLs, and security restrictions.
+* **FSEB Implementation:** In `src/Configuration/SebLoader.ts` and `src/Configuration/PlistParser.ts`, FSEB normalizes the protocol URLs and inspects configuration payloads. If a `.seb` file is compressed, it inflates the GZIP stream and parses the XML Plist schema into a strongly-typed `ExamConfiguration` object, dynamically extracting the assessment URL, session keys, and window parameters.
+
+### 3. HTTP Network Layer Fingerprint Emulation (User-Agent Synthesis)
+* **The Mechanism:** Assessment servers inspect incoming HTTP request headers to prevent students from navigating via regular Chrome, Firefox, or Safari. Specifically, backend web firewalls and exam gateways verify that the `User-Agent` header matches SEB's platform signature (e.g., `SEB/3.10.2`).
+* **FSEB Implementation:** Inside `src/Browser/BrowserHost.ts`, FSEB configures the underlying Chromium `BrowserView` session to emit an authentic composite user agent:
+  ```text
+  Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 SEB/3.10.2
+  ```
+  Every HTTP GET/POST request initiated by the exam page includes this signature, passing server-side SEB validation with zero rejection.
+
+### 4. Client-Side DOM & JavaScript Runtime Emulation (`window.SafeExamBrowser`)
+* **The Mechanism:** CodeChef's client-side JavaScript performs anti-tamper telemetry by inspecting the browser's global scope before loading the problem statements and IDE. It queries `window.SafeExamBrowser` to verify browser properties like `.version` and `.platform`.
+* **FSEB Implementation:** In `src/Preload/exam-preload.ts`, FSEB injects a mock SafeExamBrowser bridge before any page scripts execute:
+  ```typescript
+  contextBridge.exposeInMainWorld('SafeExamBrowser', {
+    version: 'SEB_Windows_3.10.2',
+    platform: 'Windows',
+  });
+  ```
+  Because this is exposed in the main world via Electron's `contextBridge` / `webFrame.executeJavaScript` at `document_start`, CodeChef's client-side telemetry queries return positive status immediately.
+
+### 5. HTTP Header Stripping & Frame Liberation (CORS & CSP Rewriting)
+* **The Mechanism:** Assessment platforms often send restrictive HTTP response headers such as `X-Frame-Options: DENY`, `Content-Security-Policy: frame-ancestors 'none'`, and Cross-Origin Resource Policy headers (`COOP`/`COEP`) to isolate their embedded code editors, test case runners, or terminal frames.
+* **FSEB Implementation:** In `BrowserHost.ts`, FSEB hooks into the Chromium networking layer via `session.webRequest.onHeadersReceived`. It sanitizes incoming response headers by stripping `frame-ancestors` directives and removing `x-frame-options`, allowing embedded Monaco code editors, compiler consoles, and iframe test environments to render without CSP violations.
+
+### 6. Surgical Event Interception (Neutralizing Anti-Cheat without Breaking Monaco IDE)
+* **The Mechanism:** Exam platforms attach aggressive DOM listeners to `copy`, `paste`, `cut`, `selectstart`, `contextmenu`, and `keydown` to block text highlighting and clipboard access. These listeners call `event.preventDefault()` and `event.stopPropagation()`.
+* **FSEB Implementation:** In `src/Preload/exam-preload.ts`, FSEB wraps `EventTarget.prototype.addEventListener` before the page scripts load. 
+  - **Selective Neutralization:** When an anti-cheat script calls `e.preventDefault()` on question paragraphs or problem descriptions, FSEB neutralizes the call, allowing students to select and copy problem text.
+  - **IDE Preservation:** Crucially, inside code editor targets (`textarea`, `input`, `.monaco-editor`), Monaco Editor relies on its own `preventDefault()` during paste events so Chromium does not trigger a duplicate native DOM paste. FSEB detects editor targets (`isEditorTarget`) and preserves the editor's native event control, eliminating double-pasting and avoiding layout wrapping.
 
 ---
 

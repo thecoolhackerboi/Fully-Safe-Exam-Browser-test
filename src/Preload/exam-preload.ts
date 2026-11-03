@@ -51,12 +51,14 @@ try {
 
     if (isClipboardEvent || isKeyEvent) {
       const wrappedListener = function (this: EventTarget, evt: Event) {
-        const isEditor = isEditorElement(evt ? evt.target : null, this);
+        const isEditorListener = isEditorElement(this, null);
         let shouldNeutralize = isClipboardEvent;
 
-        // Inside a code editor or text input, do NOT neutralize preventDefault on paste/copy
-        // because the editor (Monaco/Ace) calls preventDefault() so the browser doesn't double-paste!
-        if (isClipboardEvent && isEditor && (type === 'paste' || type === 'copy' || type === 'cut')) {
+        // Inside a code editor or text input, the editor's own paste handler
+        // calls preventDefault() so Chromium does not perform a duplicate paste!
+        // We only preserve preventDefault if the listener is attached directly to the editor element.
+        // Listeners attached to document or window are anti-cheat scripts and must be neutralized.
+        if (isClipboardEvent && isEditorListener && (type === 'paste' || type === 'copy' || type === 'cut')) {
           shouldNeutralize = false;
         }
 
@@ -64,7 +66,7 @@ try {
           const keyLower = (evt.key || '').toLowerCase();
           const hasModifier = evt.ctrlKey || evt.metaKey || evt.altKey;
           if (hasModifier && (CLIPBOARD_KEYS.has(keyLower) || keyLower === 'alt')) {
-            shouldNeutralize = !isEditor;
+            shouldNeutralize = !isEditorListener;
           }
           // Protect Shift + Arrow text selection outside code editors
           const isArrowNav =
@@ -76,7 +78,7 @@ try {
             keyLower === 'home' ||
             keyLower === 'end';
           if (evt.shiftKey && isArrowNav) {
-            shouldNeutralize = !isEditor;
+            shouldNeutralize = !isEditorListener;
           }
         }
 
@@ -189,13 +191,13 @@ try {
     '  flex-shrink: 0 !important;',
     '  box-sizing: border-box !important;',
     '}',
-    '.monaco-editor, .monaco-editor .overflow-guard, .monaco-editor .monaco-scrollable-element, .monaco-editor .scrollbar, .monaco-editor .decorationsOverviewRuler, .monaco-editor .margin, .monaco-editor .glyph-margin, .monaco-editor .line-numbers {',
+    '.monaco-editor .scrollbar, .monaco-editor .decorationsOverviewRuler, .monaco-editor .line-numbers {',
     '  -webkit-user-select: none !important;',
     '  user-select: none !important;',
     '}',
-    '.monaco-editor .view-line, .monaco-editor textarea {',
-    '  -webkit-user-select: text !important;',
-    '  user-select: text !important;',
+    '.monaco-editor, .monaco-editor *, .ace_editor, .ace_editor *, textarea, input {',
+    '  -webkit-user-select: text;',
+    '  user-select: text;',
     '}',
     'button[id*="ask-ai" i], button[class*="ask-ai" i],',
     'button[id*="chef-ai" i], button[class*="chef-ai" i],',
@@ -417,13 +419,14 @@ try {
 
     if (isClip || isKey) {
       var wrapped = function(evt) {
-        var isEditor = isEditorTarget(evt ? evt.target : null, this);
+        var isEditorListener = isEditorTarget(this, null);
         var neutralize = isClip;
 
         // Inside a code editor or text input, the editor's own paste handler
         // calls preventDefault() so Chromium does not perform a duplicate paste!
-        // We must preserve preventDefault inside editors to prevent double-pasting.
-        if (isClip && isEditor && (type === 'paste' || type === 'copy' || type === 'cut')) {
+        // We only preserve preventDefault if the listener is attached directly to the editor element.
+        // Listeners attached to document or window are anti-cheat scripts and must be neutralized.
+        if (isClip && isEditorListener && (type === 'paste' || type === 'copy' || type === 'cut')) {
           neutralize = false;
         }
 
@@ -431,7 +434,7 @@ try {
           var k = (evt.key || '').toLowerCase();
           var mod = evt.ctrlKey || evt.metaKey || evt.altKey;
           if (mod && CLIP_KEYS[k]) {
-            neutralize = !isEditor;
+            neutralize = !isEditorListener;
           }
           // Protect Shift + Arrow text selection outside code editors
           var isArrow =
@@ -443,7 +446,7 @@ try {
             k === 'home' ||
             k === 'end';
           if (evt.shiftKey && isArrow) {
-            neutralize = !isEditor;
+            neutralize = !isEditorListener;
           }
         }
 

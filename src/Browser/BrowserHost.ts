@@ -230,28 +230,6 @@ export class BrowserHost {
         return;
       }
 
-      // Explicit native execution of Ctrl+C and Ctrl+V inside code editors & page
-      if (input.control && !input.alt && !input.meta && input.type === 'keyDown') {
-        const k = input.key.toLowerCase();
-        if (k === 'v') {
-          webContents.paste();
-          event.preventDefault();
-          return;
-        }
-        if (k === 'c') {
-          webContents.copy();
-          return;
-        }
-        if (k === 'x') {
-          webContents.cut();
-          return;
-        }
-        if (k === 'a') {
-          webContents.selectAll();
-          return;
-        }
-      }
-
       // Alt+C, Alt+V, Alt+X, Alt+A, Alt+M shortcuts
       if (input.alt && !input.control && !input.meta && input.type === 'keyDown') {
         const k = input.key.toLowerCase();

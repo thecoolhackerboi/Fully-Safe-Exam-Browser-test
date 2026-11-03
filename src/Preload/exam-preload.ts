@@ -54,11 +54,13 @@ try {
         const isEditorListener = isEditorElement(this, null);
         let shouldNeutralize = isClipboardEvent;
 
-        // Inside a code editor or text input, the editor's own paste handler
-        // calls preventDefault() so Chromium does not perform a duplicate paste!
-        // We only preserve preventDefault if the listener is attached directly to the editor element.
-        // Listeners attached to document or window are anti-cheat scripts and must be neutralized.
-        if (isClipboardEvent && isEditorListener && (type === 'paste' || type === 'copy' || type === 'cut')) {
+        // For copy and cut, always neutralize anti-cheat blockers
+        if (type === 'copy' || type === 'cut') {
+          shouldNeutralize = true;
+        }
+
+        // For paste, if listener is directly on the editor, allow editor's own paste logic
+        if (type === 'paste' && isEditorListener) {
           shouldNeutralize = false;
         }
 
@@ -66,7 +68,7 @@ try {
           const keyLower = (evt.key || '').toLowerCase();
           const hasModifier = evt.ctrlKey || evt.metaKey || evt.altKey;
           if (hasModifier && (CLIPBOARD_KEYS.has(keyLower) || keyLower === 'alt')) {
-            shouldNeutralize = !isEditorListener;
+            shouldNeutralize = true;
           }
           // Protect Shift + Arrow text selection outside code editors
           const isArrowNav =
@@ -263,7 +265,7 @@ try {
     } catch (e) {}
   }
 
-  // Hook into Monaco Editor to fix cascading indentation & gaps on paste
+  // Hook into Monaco Editor to fix cascading indentation & gaps on paste and ensure Ctrl+V / Ctrl+C work
   function configureMonacoEditor(ed) {
     if (!ed || typeof ed.updateOptions !== 'function') return;
     try {
@@ -274,6 +276,37 @@ try {
         automaticLayout: true,   // Adapts to dynamic split resizing and avoids container expansion
         scrollBeyondLastLine: false,
       });
+
+      if (!ed.__fsebKeysBound && typeof ed.addCommand === 'function' && window.monaco && window.monaco.KeyMod && window.monaco.KeyCode) {
+        ed.__fsebKeysBound = true;
+        // Bind Ctrl+V directly in Monaco
+        ed.addCommand(window.monaco.KeyMod.CtrlCmd | window.monaco.KeyCode.KeyV, function() {
+          if (navigator.clipboard && navigator.clipboard.readText) {
+            navigator.clipboard.readText().then(function(t) {
+              if (t) {
+                var clean = t.replace(/\r\r\n/g, '\n').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+                ed.trigger('keyboard', 'type', { text: clean });
+              }
+            }).catch(function() {
+              document.execCommand('paste');
+            });
+          } else {
+            document.execCommand('paste');
+          }
+        });
+
+        // Bind Ctrl+C directly in Monaco
+        ed.addCommand(window.monaco.KeyMod.CtrlCmd | window.monaco.KeyCode.KeyC, function() {
+          var model = ed.getModel();
+          var sel = ed.getSelection();
+          if (model && sel) {
+            var text = model.getValueInRange(sel);
+            if (text && navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(text).catch(function() {});
+            }
+          }
+        });
+      }
     } catch (e) {}
   }
 
@@ -293,6 +326,113 @@ try {
     } catch (e) {}
   }
 
+  // Hook into Ace Editor (used by CodeChef) to ensure paste & copy are never blocked
+  function patchAceEditor(editor) {
+    if (!editor || editor.__fsebHooked) return;
+    editor.__fsebHooked = true;
+
+    // 1. Ensure onPaste always inserts the clean text and cannot be neutralized by anti-cheat scripts
+    var origOnPaste = editor.onPaste;
+    var safeOnPaste = function(text, event) {
+      if (editor.$readOnly) return;
+      if (typeof text === 'string' && text.length > 0) {
+        var cleanText = text.replace(/\r\r\n/g, '\n').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        editor.insert(cleanText);
+        return;
+      }
+      if (origOnPaste) {
+        origOnPaste.call(editor, text, event);
+      }
+    };
+    editor.onPaste = safeOnPaste;
+
+    // Prevent CodeChef from replacing editor.onPaste with an empty function
+    try {
+      Object.defineProperty(editor, 'onPaste', {
+        get: function() { return safeOnPaste; },
+        set: function(fn) {
+          if (typeof fn === 'function') {
+            origOnPaste = fn;
+          }
+        },
+        configurable: true
+      });
+    } catch (e) {}
+
+    // 2. Remove any paste-blocking or copy-blocking commands from editor.commands
+    if (editor.commands) {
+      ['disablePaste', 'disableCopy', 'disableCut', 'blockPaste', 'blockCopy'].forEach(function(cmd) {
+        try { editor.commands.removeCommand(cmd); } catch (e) {}
+      });
+
+      // Ensure Ctrl+V always pastes cleanly into Ace Editor
+      editor.commands.addCommand({
+        name: 'fsebPaste',
+        bindKey: { win: 'Ctrl-V', mac: 'Command-V' },
+        exec: function(ed) {
+          if (navigator.clipboard && navigator.clipboard.readText) {
+            navigator.clipboard.readText().then(function(t) {
+              if (t) {
+                var clean = t.replace(/\r\r\n/g, '\n').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+                ed.insert(clean);
+              }
+            }).catch(function() {
+              document.execCommand('paste');
+            });
+          } else {
+            document.execCommand('paste');
+          }
+        },
+        readOnly: false
+      });
+
+      // Ensure Ctrl+C always copies the selected text cleanly from Ace Editor
+      editor.commands.addCommand({
+        name: 'fsebCopy',
+        bindKey: { win: 'Ctrl-C', mac: 'Command-C' },
+        exec: function(ed) {
+          var sel = ed.getSelectedText ? ed.getSelectedText() : (ed.session ? ed.session.getTextRange(ed.getSelectionRange()) : '');
+          if (sel && navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(sel).catch(function() {});
+          } else if (sel) {
+            if (ed.textInput && ed.textInput.getElement) {
+              var el = ed.textInput.getElement();
+              if (el) {
+                el.value = sel;
+                el.select();
+                document.execCommand('copy');
+              }
+            }
+          }
+        },
+        readOnly: true
+      });
+    }
+  }
+
+  function scanAndPatchAce() {
+    try {
+      if (window.ace) {
+        if (typeof window.ace.edit === 'function' && !window.ace.__fsebHooked) {
+          window.ace.__fsebHooked = true;
+          var origEdit = window.ace.edit;
+          window.ace.edit = function() {
+            var ed = origEdit.apply(this, arguments);
+            if (ed) patchAceEditor(ed);
+            return ed;
+          };
+        }
+      }
+      var aceEls = document.querySelectorAll('.ace_editor');
+      for (var i = 0; i < aceEls.length; i++) {
+        var el = aceEls[i];
+        if (el.env && el.env.editor) {
+          patchAceEditor(el.env.editor);
+        }
+      }
+    } catch (e) {}
+  }
+
   function injectStyle() {
     if (document.head && !document.getElementById('fseb-clipboard-styles')) {
       document.head.appendChild(style);
@@ -301,6 +441,7 @@ try {
     }
     removeAskAiElements();
     scanAndPatchMonaco();
+    scanAndPatchAce();
   }
 
   injectStyle();
@@ -308,6 +449,7 @@ try {
     injectStyle();
     removeAskAiElements();
     scanAndPatchMonaco();
+    scanAndPatchAce();
   });
 
   var obs = new MutationObserver(function() {
@@ -316,15 +458,17 @@ try {
     }
     removeAskAiElements();
     scanAndPatchMonaco();
+    scanAndPatchAce();
   });
   if (document.documentElement) {
     obs.observe(document.documentElement, { childList: true, subtree: true });
   }
 
-  // Periodic check for async loaded Monaco Editor instances (AMD/Webpack loaded)
+  // Periodic check for async loaded Monaco & Ace Editor instances (AMD/Webpack loaded)
   var monacoPollCount = 0;
   var monacoPollInterval = setInterval(function() {
     scanAndPatchMonaco();
+    scanAndPatchAce();
     removeAskAiElements();
     monacoPollCount++;
     if (monacoPollCount > 60) clearInterval(monacoPollInterval);
@@ -422,11 +566,13 @@ try {
         var isEditorListener = isEditorTarget(this, null);
         var neutralize = isClip;
 
-        // Inside a code editor or text input, the editor's own paste handler
-        // calls preventDefault() so Chromium does not perform a duplicate paste!
-        // We only preserve preventDefault if the listener is attached directly to the editor element.
-        // Listeners attached to document or window are anti-cheat scripts and must be neutralized.
-        if (isClip && isEditorListener && (type === 'paste' || type === 'copy' || type === 'cut')) {
+        // For copy and cut, always neutralize anti-cheat blockers
+        if (type === 'copy' || type === 'cut') {
+          neutralize = true;
+        }
+
+        // For paste, if listener is directly on the editor, allow editor's own paste logic
+        if (type === 'paste' && isEditorListener) {
           neutralize = false;
         }
 
@@ -434,7 +580,7 @@ try {
           var k = (evt.key || '').toLowerCase();
           var mod = evt.ctrlKey || evt.metaKey || evt.altKey;
           if (mod && CLIP_KEYS[k]) {
-            neutralize = !isEditorListener;
+            neutralize = true;
           }
           // Protect Shift + Arrow text selection outside code editors
           var isArrow =

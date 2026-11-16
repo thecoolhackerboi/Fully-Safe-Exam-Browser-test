@@ -4,6 +4,7 @@ import { AppConfiguration } from './Core/AppConfiguration';
 import { ExamSession, SessionState } from './Core/ExamSession';
 import { MainWindow } from './UI/MainWindow';
 import { WindowsIntegration } from './Platform/WindowsIntegration';
+import { NativeLockdown } from './Platform/NativeLockdown';
 
 const logger = Logger.getInstance();
 let mainWindow: MainWindow | null = null;
@@ -103,11 +104,11 @@ if (!gotTheLock) {
 
   app.on('before-quit', () => {
     logger.info('Main', 'Application shutting down cleanly.');
-    WindowsIntegration.setTouchpadLockdown(false);
+    NativeLockdown.shutdown();
   });
 
   process.on('exit', () => {
-    WindowsIntegration.setTouchpadLockdown(false);
+    NativeLockdown.shutdown();
   });
 
   // Global uncaught exceptions

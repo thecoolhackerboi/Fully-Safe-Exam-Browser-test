@@ -1,11 +1,12 @@
 import * as path from 'path';
-import { BrowserWindow, dialog, ipcMain, app, globalShortcut } from 'electron';
+import { BrowserWindow, dialog, ipcMain, app, globalShortcut, screen } from 'electron';
 import { ExamSession, SessionState } from '../Core/ExamSession';
 import { BrowserHost } from '../Browser/BrowserHost';
 import { SebLoader } from '../Configuration/SebLoader';
 import { AppConfiguration } from '../Core/AppConfiguration';
 import { Logger } from '../Core/Logger';
 import { WindowsIntegration } from '../Platform/WindowsIntegration';
+import { NativeLockdown } from '../Platform/NativeLockdown';
 
 export class MainWindow {
   private static readonly logger = Logger.getInstance();
@@ -22,6 +23,9 @@ export class MainWindow {
     this.session = session;
     this.registerIpcHandlers();
     this.subscribeToSessionEvents();
+    NativeLockdown.initialize(() => {
+      this.toggleStaleState();
+    });
   }
 
   public getWindow(): BrowserWindow | null {
@@ -120,6 +124,9 @@ export class MainWindow {
       if (this.staleStateEnabled && this.window && !this.window.isDestroyed()) {
         setTimeout(() => {
           if (!this.window || this.window.isDestroyed() || this.isShowingQuitConfirmation) return;
+          const display = screen.getPrimaryDisplay();
+          this.window.setBounds(display.bounds);
+          this.window.setFullScreen(true);
           this.window.show();
           this.window.setAlwaysOnTop(true, 'screen-saver');
           this.window.moveTop();
@@ -127,7 +134,7 @@ export class MainWindow {
           if (this.browserHost) {
             this.browserHost.resizeToParent();
           }
-        }, 25);
+        }, 15);
       }
       this.session.handleFocusChange(false);
     });
@@ -205,7 +212,7 @@ export class MainWindow {
       try {
         globalShortcut.unregister('CommandOrControl+Alt+L');
       } catch (e) {}
-      WindowsIntegration.setTouchpadLockdown(false);
+      NativeLockdown.shutdown();
       this.browserHost?.destroy();
       this.browserHost = null;
       this.window = null;
@@ -231,20 +238,20 @@ export class MainWindow {
     // 1. Update central security policies
     this.session.getPolicy().setStaleState(this.staleStateEnabled);
 
-    // 2. Hardware / Driver Precision Touchpad Lockdown: block 3/4-finger gestures
-    WindowsIntegration.setTouchpadLockdown(this.staleStateEnabled);
+    // 2. Hardware / OS Low-Level Hook & Windows Taskbar Lockdown (Sub-millisecond)
+    NativeLockdown.setLockdown(this.staleStateEnabled);
 
-    // 3. Adjust OS window behavior without changing the taskbar or ever exiting maximized/fullscreen mode
+    // 3. Adjust OS window behavior: ALWAYS FULLSCREEN DISPLAY BOUNDS, NEVER MAXIMIZE (avoids Taskbar popping)
     if (this.window && !this.window.isDestroyed()) {
+      const display = screen.getPrimaryDisplay();
+      this.window.setBounds(display.bounds);
+      this.window.setFullScreen(true);
+
       if (this.staleStateEnabled) {
         this.window.setAlwaysOnTop(true, 'screen-saver');
-        this.window.setFullScreen(true);
-        this.window.maximize();
         this.window.focus();
       } else {
         this.window.setAlwaysOnTop(false);
-        this.window.setFullScreen(true);
-        this.window.maximize();
         this.window.focus();
       }
 
@@ -436,7 +443,7 @@ export class MainWindow {
       if (result.response === 0) {
         MainWindow.logger.info('MainWindow', 'User confirmed exam quit. Closing application.');
         this.session.transitionTo(SessionState.CLOSING);
-        WindowsIntegration.setTouchpadLockdown(false);
+        NativeLockdown.shutdown();
         app.quit();
       } else {
         if (this.staleStateEnabled && this.window && !this.window.isDestroyed()) {

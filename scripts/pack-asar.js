@@ -55,6 +55,20 @@ async function main() {
   console.log('[pack-asar] Packaging asar archive to:', targetAsar);
   await asar.createPackage(stageDir, targetAsar);
 
+  // 4b. Copy native helper binaries to unpack directory
+  const binSrc = path.join(rootDir, 'bin');
+  if (fs.existsSync(binSrc)) {
+    const binDest1 = path.join(rootDir, 'release', 'win-unpacked', 'bin');
+    const binDest2 = path.join(rootDir, 'release', 'win-unpacked', 'resources', 'bin');
+    fs.mkdirSync(binDest1, { recursive: true });
+    fs.mkdirSync(binDest2, { recursive: true });
+    for (const f of fs.readdirSync(binSrc)) {
+      fs.copyFileSync(path.join(binSrc, f), path.join(binDest1, f));
+      fs.copyFileSync(path.join(binSrc, f), path.join(binDest2, f));
+    }
+    console.log('[pack-asar] Synced native binaries to release/win-unpacked.');
+  }
+
   // 5. Clean up staging directory
   fs.rmSync(stageDir, { recursive: true, force: true });
 

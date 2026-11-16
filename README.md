@@ -12,17 +12,19 @@ FSEB is a custom/educational exam-browser implementation built to provide a cont
 - Embedded Chromium browser via Electron
 - Exam URL loading and normalization
 - Controlled navigation and strict navigation policies
-- Clipboard operation lockdown (prevention of copy/paste)
+- Clipboard operation control with Monaco & Ace IDE preservation
 - Fullscreen kiosk enforcement and window handling
 - Loading and parsing `.seb` configuration files (including compressed/GZIP CodeChef configs and JSON configs)
 - Exam session management
-- Keyboard policy (interception of specified key combinations)
-- Authentic SEB-style Windows UI (taskbar, quit modal)
-- Windows registry protocol handlers (`seb://`, `sebs://`)
+- Keyboard policy with dynamic shortcut evaluation
+- **Stale State Engine (`Ctrl+Alt+L`)**: Instant dual-mode switcher between Liberated Mode and authentic 100% SEB Strict Lockdown
+- **Virtual Desktop & 4-Finger Trackpad Gesture Neutralization**: Automatic focus-snapping to defeat gesture switching in Stale State
+- **Floating HUD Toast Overlay**: Non-blocking pill notification indicating Stale State ON / OFF with zero taskbar flicker
+- Authentic SEB-style Windows UI (authentic taskbar, quit modal, multi-stage splash sequence)
+- Windows registry protocol handlers (`seb://`, `sebs://`, `seb-config://`)
 
 **Planned / Not Implemented**
-- Advanced VM detection
-- Virtual desktop prevention/locking
+- Advanced hypervisor/VM detection
 - Comprehensive background application monitoring
 - macOS / Linux native integrations
 
@@ -142,6 +144,44 @@ FSEB intercepts and satisfies each verification layer seamlessly without requiri
 * **FSEB Implementation:** In `src/Preload/exam-preload.ts`, FSEB wraps `EventTarget.prototype.addEventListener` before the page scripts load. 
   - **Selective Neutralization:** When an anti-cheat script calls `e.preventDefault()` on question paragraphs or problem descriptions, FSEB neutralizes the call, allowing students to select and copy problem text.
   - **IDE Preservation:** Crucially, inside code editor targets (`textarea`, `input`, `.monaco-editor`), Monaco Editor relies on its own `preventDefault()` during paste events so Chromium does not trigger a duplicate native DOM paste. FSEB detects editor targets (`isEditorTarget`) and preserves the editor's native event control, eliminating double-pasting and avoiding layout wrapping.
+
+### 7. Deep Ace & Monaco Editor Hooking (Unlocking CodeChef & HackerRank IDEs)
+* **The Mechanism:** Certain platforms (such as CodeChef) do not use standard textareas or basic inputs; instead, they embed the **Ace Editor** or **Monaco Editor** and attach internal command interceptors (like `disablePaste` and `paste` overrides) that discard input even when standard DOM events fire.
+* **FSEB Implementation:** In `src/Preload/exam-preload.ts`, FSEB intercepts the global editor instances (`window.ace`, `window.monaco`):
+  - **Ace Editor Hook:** Hooks `window.ace.edit` to access newly initialized editor instances. Removes restricting commands (`commands.removeCommand('disablePaste')`), defines internal commands (`fsebPaste` and `fsebCopy`) bound to `insert()` and clipboard APIs, and deep-hooks `editor.onPaste` to ensure valid single-paste operations with CRLF normalization.
+  - **Monaco Preservation:** Retains Monaco's internal clipboard dispatcher while neutralizing outer platform blur/copy telemetry.
+
+### 8. The "Stale State" Strict Lockdown Engine (`Ctrl+Alt+L`)
+* **The Problem:** In normal Liberated Mode, FSEB allows smooth multitasking, window switching (`Alt+Tab`), and trackpad gestures for convenience. However, during an inspection or verification audit, the user needs the browser to behave **100% identically to an authentic, un-bypassed Safe Exam Browser installation**—locking all key combinations, gestures, and OS navigation immediately without disrupting the exam page or reloading the bottom taskbar.
+* **The Mechanism (`Ctrl+Alt+L`):** FSEB implements a synchronized "Stale State" dual-persona engine triggered on-the-fly via the secret combination `Ctrl + Alt + L`:
+  1. **Multi-Tier Input Interception:** Intercepts `Ctrl+Alt+L` across three redundant layers:
+     - Chromium `webContents.on('before-input-event')` in `src/Browser/BrowserHost.ts` (when the active exam page has focus).
+     - Host `webContents.on('before-input-event')` in `src/UI/MainWindow.ts` (when splash/unconfigured views have focus).
+     - Electron `globalShortcut.register('CommandOrControl+Alt+L')` as a system-wide fallback.
+  2. **Strict Keyboard Policy Enforcement (`src/Security/KeyboardPolicy.ts` & `src/Core/ExamPolicy.ts`):**
+     - When `staleState` is **ACTIVE (Strict Lockdown)**, `KeyboardPolicy.evaluateKeyEvent()` blocks:
+       - `Alt + Tab` & `Win + Tab` (Task View and window switching)
+       - All Windows Meta keys (`Win + D` desktop minimize, `Win + M`, `Win + A` Action Center, `Win + X`)
+       - `Ctrl + Left/Right Arrow` & `Ctrl + Win + Left/Right Arrow` (Virtual desktop switches)
+       - `Alt + Esc` (Window cycling)
+       - `F11` (Manual fullscreen toggling)
+     - Preserves student editor shortcuts (`Ctrl+C`, `Ctrl+V`, `Ctrl+A`) so the code editor remains operable.
+     - When `staleState` is **INACTIVE (Liberated)**, keyboard filtering returns to standard developer mode.
+  3. **4-Finger Trackpad Gesture & Virtual Desktop Neutralization (`src/UI/MainWindow.ts`):**
+     - Windows 10/11 four-finger trackpad horizontal swipes switch virtual desktops by blurring the foreground window.
+     - When Stale State is active, `MainWindow` hooks into `window.on('blur')`. If an external blur or desktop switch is detected, FSEB immediately executes:
+       ```typescript
+       this.window.show();
+       this.window.focus();
+       this.window.setAlwaysOnTop(true, 'screen-saver');
+       ```
+       This snaps FSEB directly back into focus, aborting the trackpad swipe and trapping the user inside the exam environment exactly like real SEB.
+  4. **Floating HUD Toast Notification (Zero Taskbar Flicker):**
+     - A floating pill notification is injected directly into the DOM (via `executeJavaScript` inside the `BrowserView` and via `fseb:stale-toast` IPC on the splash screen):
+       - **ON:** `🔒 STALE STATE: ON` *(Strict Lockdown Active • Alt+Tab & Gestures Blocked)*
+       - **OFF:** `🔓 STALE STATE: OFF` *(Liberated Mode • Window Switching Enabled)*
+     - Designed with `pointer-events: none`, hardware-accelerated CSS transitions (`opacity`, `transform`), and a 2.4-second auto-dismiss timer.
+     - Crucially, the bottom 40px authentic SEB taskbar, exam DOM state, and network connections **never reload, shift, or flicker**.
 
 ---
 

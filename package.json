@@ -64,6 +64,20 @@
     "files": [
       "dist/**/*",
       "package.json"
+    ],
+    "extraFiles": [
+      {
+        "from": "bin",
+        "to": "bin",
+        "filter": ["**/*"]
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "bin",
+        "to": "bin",
+        "filter": ["**/*"]
+      }
     ]
   },
   "dependencies": {

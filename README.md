@@ -180,7 +180,7 @@ FSEB intercepts and satisfies each verification layer seamlessly without requiri
      - A floating pill notification is injected directly into the DOM (via `executeJavaScript` inside the `BrowserView` and via `fseb:stale-toast` IPC on the splash screen):
        - **ON:** `🔒 STALE STATE: ON` *(Strict Lockdown Active • Alt+Tab & Gestures Blocked)*
        - **OFF:** `🔓 STALE STATE: OFF` *(Liberated Mode • Window Switching Enabled)*
-     - Designed with `pointer-events: none`, hardware-accelerated CSS transitions (`opacity`, `transform`), and a 2.4-second auto-dismiss timer.
+     - Designed with `pointer-events: none`, hardware-accelerated CSS transitions (`opacity`, `transform`), and a snappy 900ms auto-dismiss timer.
      - Crucially, the bottom 40px authentic SEB taskbar, exam DOM state, and network connections **never reload, shift, or flicker**.
 
 ---

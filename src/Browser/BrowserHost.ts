@@ -153,7 +153,7 @@ export class BrowserHost {
             'border-radius: 9999px !important',
             'font-family: -apple-system, BlinkMacSystemFont, \\"Segoe UI\\", Roboto, sans-serif !important',
             'pointer-events: none !important',
-            'transition: opacity 0.3s ease, transform 0.3s ease !important',
+            'transition: opacity 0.2s ease, transform 0.2s ease !important',
             'opacity: 0 !important',
             'transform: translate(-50%, -10px) !important'
           ].join(';');
@@ -169,8 +169,8 @@ export class BrowserHost {
             toast.style.transform = 'translate(-50%, -10px)';
             setTimeout(function() {
               if (toast.parentNode) toast.parentNode.removeChild(toast);
-            }, 350);
-          }, 2400);
+            }, 220);
+          }, 900);
         } catch (e) {}
       })();
     `;

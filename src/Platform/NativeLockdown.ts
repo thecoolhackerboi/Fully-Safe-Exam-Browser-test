@@ -126,6 +126,23 @@ export class NativeLockdown {
   }
 
   /**
+   * Notifies the native helper when an in-app modal dialog is active (e.g. Quit Exam prompt, file picker)
+   * so it does not aggressively pull foreground focus away from the dialog.
+   */
+  public static setDialogOpen(open: boolean): void {
+    if (!this.helperProcess || !this.helperProcess.stdin || this.helperProcess.stdin.destroyed) {
+      return;
+    }
+    const cmd = open ? 'DIALOG_OPEN\n' : 'DIALOG_CLOSE\n';
+    try {
+      this.helperProcess.stdin.write(cmd);
+      this.logger.info('NativeLockdown', `Native foreground monitor paused for modal dialog: ${open}`);
+    } catch (err) {
+      this.logger.warn('NativeLockdown', 'Failed to write dialog state command to native helper', { error: String(err) });
+    }
+  }
+
+  /**
    * Gracefully restores system state (Windows taskbar, touchpad, hooks) and shuts down helper
    */
   public static shutdown(): void {

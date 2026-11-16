@@ -78,6 +78,13 @@ namespace FSEB.Native
         [DllImport("user32.dll")]
         private static extern IntPtr GetForegroundWindow();
 
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+        [DllImport("user32.dll", ExactSpelling = true)]
+        private static extern IntPtr GetAncestor(IntPtr hwnd, uint gaFlags);
+        private const uint GA_ROOTOWNER = 3;
+
         [DllImport("user32.dll")]
         private static extern bool SetForegroundWindow(IntPtr hWnd);
 
@@ -130,6 +137,7 @@ namespace FSEB.Native
         private static IntPtr _hookId = IntPtr.Zero;
         private static LowLevelKeyboardProc _hookCallback;
         private static volatile bool _isLocked = false;
+        private static volatile bool _isDialogOpen = false;
         private static IntPtr _fsebHwnd = IntPtr.Zero;
 
         // Modifier key states tracked directly on the event stream
@@ -219,6 +227,18 @@ namespace FSEB.Native
                         Console.WriteLine("LOCK_OFF_OK");
                         Console.Out.Flush();
                     }
+                    else if (string.Equals(line, "DIALOG_OPEN", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _isDialogOpen = true;
+                        Console.WriteLine("DIALOG_OPEN_OK");
+                        Console.Out.Flush();
+                    }
+                    else if (string.Equals(line, "DIALOG_CLOSE", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _isDialogOpen = false;
+                        Console.WriteLine("DIALOG_CLOSE_OK");
+                        Console.Out.Flush();
+                    }
                     else if (string.Equals(line, "QUIT", StringComparison.OrdinalIgnoreCase))
                     {
                         break;
@@ -240,7 +260,7 @@ namespace FSEB.Native
             {
                 try
                 {
-                    if (_isLocked && _fsebHwnd != IntPtr.Zero)
+                    if (_isLocked && !_isDialogOpen && _fsebHwnd != IntPtr.Zero)
                     {
                         // 1. Detect if user swiped to another virtual desktop and follow them instantly
                         if (_vdm != null)
@@ -264,10 +284,22 @@ namespace FSEB.Native
 
                         // 2. Detect if another window or desktop background has foreground
                         IntPtr fg = GetForegroundWindow();
-                        if (fg != _fsebHwnd)
+                        if (fg != IntPtr.Zero && fg != _fsebHwnd)
                         {
-                            SetWindowPos(_fsebHwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_SHOWWINDOW);
-                            SetForegroundWindow(_fsebHwnd);
+                            // Check if fg belongs to FSEB itself (e.g. quit confirmation dialog, prompt, file picker)
+                            uint fgPid = 0;
+                            uint fsebPid = 0;
+                            GetWindowThreadProcessId(fg, out fgPid);
+                            GetWindowThreadProcessId(_fsebHwnd, out fsebPid);
+
+                            IntPtr rootOwner = GetAncestor(fg, GA_ROOTOWNER);
+
+                            // Only snatch foreground back if it belongs to an external alien application/desktop!
+                            if ((fsebPid == 0 || fgPid != fsebPid) && rootOwner != _fsebHwnd)
+                            {
+                                SetWindowPos(_fsebHwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_SHOWWINDOW);
+                                SetForegroundWindow(_fsebHwnd);
+                            }
                         }
                     }
                 }

@@ -144,8 +144,13 @@ export class MainWindow {
       this.session.handleFocusChange(false);
     });
 
-    // Intercept Ctrl+Alt+L on main window webContents (for splash/unconfigured views)
+    // Intercept Ctrl+Alt+L on main window webContents (for splash/unconfigured views) and Ctrl+Q
     this.window.webContents.on('before-input-event', (event, input) => {
+      if (input.control && !input.alt && !input.meta && input.type === 'keyDown' && input.key.toLowerCase() === 'q') {
+        this.showQuitConfirmation();
+        event.preventDefault();
+        return;
+      }
       if (input.control && input.alt && !input.meta && input.type === 'keyDown') {
         if (input.key.toLowerCase() === 'l') {
           this.toggleStaleState();
@@ -372,21 +377,26 @@ export class MainWindow {
     ipcMain.handle('fseb:open-file-picker', async () => {
       if (!this.window) return null;
 
-      const result = await dialog.showOpenDialog(this.window, {
-        title: 'Open Exam Configuration',
-        buttonLabel: 'Select Configuration',
-        filters: [
-          { name: 'Safe Exam Browser Config (*.seb)', extensions: ['seb'] },
-          { name: 'JSON Exam Config (*.json)', extensions: ['json'] },
-          { name: 'All Files (*.*)', extensions: ['*'] },
-        ],
-        properties: ['openFile'],
-      });
+      NativeLockdown.setDialogOpen(true);
+      try {
+        const result = await dialog.showOpenDialog(this.window, {
+          title: 'Open Exam Configuration',
+          buttonLabel: 'Select Configuration',
+          filters: [
+            { name: 'Safe Exam Browser Config (*.seb)', extensions: ['seb'] },
+            { name: 'JSON Exam Config (*.json)', extensions: ['json'] },
+            { name: 'All Files (*.*)', extensions: ['*'] },
+          ],
+          properties: ['openFile'],
+        });
 
-      if (!result.canceled && result.filePaths.length > 0) {
-        return result.filePaths[0];
+        if (!result.canceled && result.filePaths.length > 0) {
+          return result.filePaths[0];
+        }
+        return null;
+      } finally {
+        NativeLockdown.setDialogOpen(false);
       }
-      return null;
     });
 
     ipcMain.handle('fseb:start-exam', async (_event, filePath: string) => {
@@ -428,6 +438,9 @@ export class MainWindow {
     if (this.isShowingQuitConfirmation) return;
     this.isShowingQuitConfirmation = true;
 
+    // Pause aggressive foreground stealing in native helper while modal dialog is up
+    NativeLockdown.setDialogOpen(true);
+
     try {
       const wasAlwaysOnTop = this.window.isAlwaysOnTop();
       if (wasAlwaysOnTop) {
@@ -459,6 +472,7 @@ export class MainWindow {
     } catch (err) {
       MainWindow.logger.error('MainWindow', 'Error displaying quit dialog', { error: String(err) });
     } finally {
+      NativeLockdown.setDialogOpen(false);
       this.isShowingQuitConfirmation = false;
     }
   }

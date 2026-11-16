@@ -296,6 +296,13 @@ export class BrowserHost {
         return;
       }
 
+      // Ctrl+Q shortcut to request exam quit confirmation
+      if (input.control && !input.alt && !input.meta && input.type === 'keyDown' && input.key.toLowerCase() === 'q') {
+        this.options.onQuitRequested?.();
+        event.preventDefault();
+        return;
+      }
+
       // Ctrl+Alt+L secret combination to toggle Stale State (Strict Lockdown vs Liberated)
       if (input.control && input.alt && !input.meta && input.type === 'keyDown') {
         const k = input.key.toLowerCase();

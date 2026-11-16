@@ -28,7 +28,6 @@ namespace FSEB.Native
         private const int VK_D = 0x44;
         private const int VK_M = 0x4D;
         private const int VK_L = 0x4C;
-        private const int VK_F4 = 0x73;
 
         private const int SW_HIDE = 0;
         private const int SW_SHOW = 5;
@@ -81,12 +80,6 @@ namespace FSEB.Native
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
         [DllImport("user32.dll")]
-        private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
-
-        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-        private static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);
-
-        [DllImport("user32.dll")]
         private static extern bool GetMessage(out MSG lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax);
 
         [DllImport("user32.dll")]
@@ -110,54 +103,45 @@ namespace FSEB.Native
             public int pt_y;
         }
 
-        // COM Interop for Windows 10/11 Virtual Desktop Pinning
+        // Official public Win32 Virtual Desktop Manager COM interface
         [ComImport]
         [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-        [Guid("6D5140C1-7436-11CE-8034-00AA006009FA")]
-        private interface IServiceProvider
+        [Guid("a5cd92dd-0160-485a-9f0b-488f75f32cd8")]
+        private interface IVirtualDesktopManager
         {
             [PreserveSig]
-            int QueryService(ref Guid guidService, ref Guid riid, out IntPtr ppvObject);
+            int IsWindowOnCurrentVirtualDesktop(IntPtr topLevelWindow, out bool onCurrentDesktop);
+
+            [PreserveSig]
+            int GetWindowDesktopId(IntPtr topLevelWindow, out Guid desktopId);
+
+            [PreserveSig]
+            int MoveWindowToDesktop(IntPtr topLevelWindow, ref Guid desktopId);
         }
 
-        [ComImport]
-        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-        [Guid("1841C6D7-4F9D-42C0-AF41-8747538F10E5")]
-        private interface IApplicationViewCollection
-        {
-            void GetViews(out IntPtr array);
-            void GetViewForHwnd(IntPtr hwnd, out IntPtr view);
-        }
-
-        [ComImport]
-        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-        [Guid("4CE81583-1E4C-4632-A621-07A53543148F")]
-        private interface IVirtualDesktopPinnedApps
-        {
-            bool IsAppIdPinned(string appId);
-            void PinAppID(string appId);
-            void UnpinAppID(string appId);
-            bool IsViewPinned(IntPtr applicationView);
-            void PinView(IntPtr applicationView);
-            void UnpinView(IntPtr applicationView);
-        }
+        private static readonly Guid CLSID_VirtualDesktopManager = new Guid("aa509085-ecd9-4eab-864b-1238d9634ec2");
+        private static IVirtualDesktopManager _vdm = null;
 
         private static IntPtr _hookId = IntPtr.Zero;
         private static LowLevelKeyboardProc _hookCallback;
         private static volatile bool _isLocked = false;
         private static IntPtr _fsebHwnd = IntPtr.Zero;
 
-        // Modifier key states tracked directly in the hook (handles both physical and injected keys)
+        // Modifier key states tracked directly on the event stream
         private static volatile bool _winDown = false;
         private static volatile bool _ctrlDown = false;
         private static volatile bool _altDown = false;
 
-        private static int _origFourFingerSlide = 2;
-        private static int _origThreeFingerSlide = 65535;
-        private static bool _savedTouchpad = false;
-
         public static void Main(string[] args)
         {
+            // Initialize IVirtualDesktopManager
+            try
+            {
+                Type vdmType = Type.GetTypeFromCLSID(CLSID_VirtualDesktopManager);
+                _vdm = (IVirtualDesktopManager)Activator.CreateInstance(vdmType);
+            }
+            catch {}
+
             // Install LowLevelKeyboardProc
             _hookCallback = HookCallback;
             using (Process curProcess = Process.GetCurrentProcess())
@@ -173,7 +157,7 @@ namespace FSEB.Native
             };
             inputThread.Start();
 
-            // Background thread to snap foreground back if anything attempts to defocus FSEB
+            // Background thread to snap foreground and virtual desktop back instantaneously
             Thread monitorThread = new Thread(MonitorForegroundLoop)
             {
                 IsBackground = true
@@ -213,7 +197,6 @@ namespace FSEB.Native
                             if (long.TryParse(parts[1], out handleVal))
                             {
                                 _fsebHwnd = new IntPtr(handleVal);
-                                PinWindowToAllDesktops(_fsebHwnd);
                                 Console.WriteLine("ATTACH_OK");
                                 Console.Out.Flush();
                             }
@@ -254,67 +237,37 @@ namespace FSEB.Native
                 {
                     if (_isLocked && _fsebHwnd != IntPtr.Zero)
                     {
-                        IntPtr fg = GetForegroundWindow();
-                        if (fg != _fsebHwnd && fg != IntPtr.Zero)
+                        // 1. Detect if user swiped to another virtual desktop and follow them instantly
+                        if (_vdm != null)
                         {
-                            // Reclaim foreground immediately
+                            bool onCurrent = true;
+                            int hr = _vdm.IsWindowOnCurrentVirtualDesktop(_fsebHwnd, out onCurrent);
+                            if (hr == 0 && !onCurrent)
+                            {
+                                // The user has swiped to another virtual desktop!
+                                // Read the active virtual desktop GUID from registry
+                                byte[] curBytes = (byte[])Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\VirtualDesktops", "CurrentVirtualDesktop", null);
+                                if (curBytes != null && curBytes.Length == 16)
+                                {
+                                    Guid curGuid = new Guid(curBytes);
+                                    _vdm.MoveWindowToDesktop(_fsebHwnd, ref curGuid);
+                                }
+                                SetWindowPos(_fsebHwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_SHOWWINDOW);
+                                SetForegroundWindow(_fsebHwnd);
+                            }
+                        }
+
+                        // 2. Detect if another window or desktop background has foreground
+                        IntPtr fg = GetForegroundWindow();
+                        if (fg != _fsebHwnd)
+                        {
                             SetWindowPos(_fsebHwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_SHOWWINDOW);
                             SetForegroundWindow(_fsebHwnd);
                         }
                     }
                 }
                 catch {}
-                Thread.Sleep(25);
-            }
-        }
-
-        private static void PinWindowToAllDesktops(IntPtr hWnd)
-        {
-            if (hWnd == IntPtr.Zero) return;
-            try
-            {
-                Guid CLSID_ImmersiveShell = new Guid("C2F03A33-21F5-47FA-B4BB-156362A2F239");
-                Type shellType = Type.GetTypeFromCLSID(CLSID_ImmersiveShell);
-                object shell = Activator.CreateInstance(shellType);
-                IServiceProvider sp = (IServiceProvider)shell;
-
-                Guid IID_IApplicationViewCollection = new Guid("1841C6D7-4F9D-42C0-AF41-8747538F10E5");
-                Guid IID_IVirtualDesktopPinnedApps = new Guid("4CE81583-1E4C-4632-A621-07A53543148F");
-
-                IntPtr pViewCollection;
-                sp.QueryService(ref IID_IApplicationViewCollection, ref IID_IApplicationViewCollection, out pViewCollection);
-                IntPtr pPinnedApps;
-                sp.QueryService(ref IID_IVirtualDesktopPinnedApps, ref IID_IVirtualDesktopPinnedApps, out pPinnedApps);
-
-                if (pViewCollection != IntPtr.Zero && pPinnedApps != IntPtr.Zero)
-                {
-                    IApplicationViewCollection viewCollection = (IApplicationViewCollection)Marshal.GetObjectForIUnknown(pViewCollection);
-                    IVirtualDesktopPinnedApps pinnedApps = (IVirtualDesktopPinnedApps)Marshal.GetObjectForIUnknown(pPinnedApps);
-                    IntPtr view;
-                    viewCollection.GetViewForHwnd(hWnd, out view);
-                    if (view != IntPtr.Zero && !pinnedApps.IsViewPinned(view))
-                    {
-                        pinnedApps.PinView(view);
-                    }
-                }
-            }
-            catch {}
-        }
-
-        private static void CloseExtraVirtualDesktops()
-        {
-            // Closes any secondary/ghost virtual desktops (Ctrl+Win+F4)
-            // Once all other virtual desktops are closed, 4-finger swipes have nowhere to switch
-            for (int i = 0; i < 6; i++)
-            {
-                keybd_event((byte)VK_CONTROL, 0, 0, UIntPtr.Zero);
-                keybd_event((byte)VK_LWIN, 0, 0, UIntPtr.Zero);
-                keybd_event((byte)VK_F4, 0, 0, UIntPtr.Zero);
-
-                keybd_event((byte)VK_F4, 0, 2 /* KEYEVENTF_KEYUP */, UIntPtr.Zero);
-                keybd_event((byte)VK_LWIN, 0, 2, UIntPtr.Zero);
-                keybd_event((byte)VK_CONTROL, 0, 2, UIntPtr.Zero);
-                Thread.Sleep(20);
+                Thread.Sleep(15);
             }
         }
 
@@ -325,79 +278,20 @@ namespace FSEB.Native
             // 1. Hide Windows Taskbar
             HideWindowsTaskbar(true);
 
-            // 2. Close any extra virtual desktops so only Desktop 1 remains
-            CloseExtraVirtualDesktops();
-
-            // 3. Pin FSEB window to all virtual desktops
+            // 2. Ensure FSEB window is on current virtual desktop and foreground
             if (_fsebHwnd != IntPtr.Zero)
             {
-                PinWindowToAllDesktops(_fsebHwnd);
                 SetWindowPos(_fsebHwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_SHOWWINDOW);
                 SetForegroundWindow(_fsebHwnd);
             }
-
-            // 4. In-memory registry lockdown for precision touchpad
-            try
-            {
-                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad", true))
-                {
-                    if (key != null)
-                    {
-                        if (!_savedTouchpad)
-                        {
-                            object val4 = key.GetValue("FourFingerSlideEnabled");
-                            if (val4 is int) _origFourFingerSlide = (int)val4;
-                            object val3 = key.GetValue("ThreeFingerSlideEnabled");
-                            if (val3 is int) _origThreeFingerSlide = (int)val3;
-                            _savedTouchpad = true;
-                        }
-
-                        key.SetValue("FourFingerSlideEnabled", 0, RegistryValueKind.DWord);
-                        key.SetValue("ThreeFingerSlideEnabled", 0, RegistryValueKind.DWord);
-                        key.SetValue("FourFingerTapEnabled", 0, RegistryValueKind.DWord);
-                        key.SetValue("ThreeFingerTapEnabled", 0, RegistryValueKind.DWord);
-                        key.SetValue("FourFingerUp", 0, RegistryValueKind.DWord);
-                        key.SetValue("FourFingerDown", 0, RegistryValueKind.DWord);
-                        key.SetValue("FourFingerLeft", 0, RegistryValueKind.DWord);
-                        key.SetValue("FourFingerRight", 0, RegistryValueKind.DWord);
-                        key.SetValue("ThreeFingerUp", 0, RegistryValueKind.DWord);
-                        key.SetValue("ThreeFingerDown", 0, RegistryValueKind.DWord);
-                        key.SetValue("ThreeFingerLeft", 0, RegistryValueKind.DWord);
-                        key.SetValue("ThreeFingerRight", 0, RegistryValueKind.DWord);
-                    }
-                }
-                UIntPtr res;
-                SendMessageTimeout((IntPtr)0xffff, 0x001A, UIntPtr.Zero, "Software\\Microsoft\\Windows\\CurrentVersion\\PrecisionTouchPad", 2, 50, out res);
-            }
-            catch {}
         }
 
         private static void RestoreLockdown()
         {
             _isLocked = false;
-
-            // 1. Show Windows Taskbar
-            HideWindowsTaskbar(false);
-
-            // 2. Restore Touchpad
-            try
-            {
-                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad", true))
-                {
-                    if (key != null && _savedTouchpad)
-                    {
-                        key.SetValue("FourFingerSlideEnabled", _origFourFingerSlide, RegistryValueKind.DWord);
-                        key.SetValue("ThreeFingerSlideEnabled", _origThreeFingerSlide, RegistryValueKind.DWord);
-                        key.SetValue("FourFingerUp", 2, RegistryValueKind.DWord);
-                        key.SetValue("FourFingerDown", 3, RegistryValueKind.DWord);
-                        key.SetValue("FourFingerLeft", 4, RegistryValueKind.DWord);
-                        key.SetValue("FourFingerRight", 4, RegistryValueKind.DWord);
-                    }
-                }
-                UIntPtr res;
-                SendMessageTimeout((IntPtr)0xffff, 0x001A, UIntPtr.Zero, "Software\\Microsoft\\Windows\\CurrentVersion\\PrecisionTouchPad", 2, 50, out res);
-            }
-            catch {}
+            // CRITICAL: DO NOT show Windows Taskbar here!
+            // FSEB is still fullscreen. Showing the taskbar on toggle-off causes the Windows taskbar
+            // to flash or pop up over the bottom bar. The Windows taskbar is only restored when FSEB quits.
         }
 
         private static void RestoreSystem()
@@ -408,25 +302,8 @@ namespace FSEB.Native
                 UnhookWindowsHookEx(_hookId);
                 _hookId = IntPtr.Zero;
             }
+            // Only restore Windows taskbar when FSEB is completely quitting
             HideWindowsTaskbar(false);
-            try
-            {
-                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad", true))
-                {
-                    if (key != null && _savedTouchpad)
-                    {
-                        key.SetValue("FourFingerSlideEnabled", _origFourFingerSlide, RegistryValueKind.DWord);
-                        key.SetValue("ThreeFingerSlideEnabled", _origThreeFingerSlide, RegistryValueKind.DWord);
-                        key.SetValue("FourFingerUp", 2, RegistryValueKind.DWord);
-                        key.SetValue("FourFingerDown", 3, RegistryValueKind.DWord);
-                        key.SetValue("FourFingerLeft", 4, RegistryValueKind.DWord);
-                        key.SetValue("FourFingerRight", 4, RegistryValueKind.DWord);
-                    }
-                }
-                UIntPtr res;
-                SendMessageTimeout((IntPtr)0xffff, 0x001A, UIntPtr.Zero, "Software\\Microsoft\\Windows\\CurrentVersion\\PrecisionTouchPad", 2, 50, out res);
-            }
-            catch {}
         }
 
         private static void HideWindowsTaskbar(bool hide)
@@ -450,7 +327,7 @@ namespace FSEB.Native
                 bool isKeyDown = (wParam == (IntPtr)WM_KEYDOWN || wParam == (IntPtr)WM_SYSKEYDOWN);
                 bool isKeyUp = (wParam == (IntPtr)WM_KEYUP || wParam == (IntPtr)WM_SYSKEYUP);
 
-                // Track modifier key states from actual event stream (works for both physical and synthetic inputs)
+                // Track modifier key states from actual event stream (works for physical and driver-injected events)
                 if (kbd.vkCode == VK_LWIN || kbd.vkCode == VK_RWIN)
                 {
                     _winDown = isKeyDown;

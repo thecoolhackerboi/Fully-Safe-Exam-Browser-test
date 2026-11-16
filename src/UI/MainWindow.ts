@@ -54,7 +54,7 @@ export class MainWindow {
       show: false,
       backgroundColor: '#ffffff',
       hasShadow: true,
-      skipTaskbar: false,
+      skipTaskbar: true,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,

@@ -103,6 +103,11 @@ if (!gotTheLock) {
 
   app.on('before-quit', () => {
     logger.info('Main', 'Application shutting down cleanly.');
+    WindowsIntegration.setTouchpadLockdown(false);
+  });
+
+  process.on('exit', () => {
+    WindowsIntegration.setTouchpadLockdown(false);
   });
 
   // Global uncaught exceptions

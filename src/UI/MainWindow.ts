@@ -5,6 +5,7 @@ import { BrowserHost } from '../Browser/BrowserHost';
 import { SebLoader } from '../Configuration/SebLoader';
 import { AppConfiguration } from '../Core/AppConfiguration';
 import { Logger } from '../Core/Logger';
+import { WindowsIntegration } from '../Platform/WindowsIntegration';
 
 export class MainWindow {
   private static readonly logger = Logger.getInstance();
@@ -15,6 +16,7 @@ export class MainWindow {
   private currentSebPath: string | null = null;
   private pendingTarget: string | null = null;
   private staleStateEnabled: boolean = false;
+  private isShowingQuitConfirmation: boolean = false;
 
   constructor(session: ExamSession) {
     this.session = session;
@@ -82,6 +84,10 @@ export class MainWindow {
       },
     });
 
+    try {
+      this.window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    } catch {}
+
     // Initialize Chromium BrowserHost for exam viewing
     this.browserHost = new BrowserHost({
       parentWindow: this.window,
@@ -108,10 +114,20 @@ export class MainWindow {
     });
 
     this.window.on('blur', () => {
+      if (this.isShowingQuitConfirmation) {
+        return; // Do NOT interrupt or steal focus while quit confirmation is displayed
+      }
       if (this.staleStateEnabled && this.window && !this.window.isDestroyed()) {
-        this.window.show();
-        this.window.focus();
-        this.window.setAlwaysOnTop(true, 'screen-saver');
+        setTimeout(() => {
+          if (!this.window || this.window.isDestroyed() || this.isShowingQuitConfirmation) return;
+          this.window.show();
+          this.window.setAlwaysOnTop(true, 'screen-saver');
+          this.window.moveTop();
+          this.window.focus();
+          if (this.browserHost) {
+            this.browserHost.resizeToParent();
+          }
+        }, 25);
       }
       this.session.handleFocusChange(false);
     });
@@ -189,6 +205,7 @@ export class MainWindow {
       try {
         globalShortcut.unregister('CommandOrControl+Alt+L');
       } catch (e) {}
+      WindowsIntegration.setTouchpadLockdown(false);
       this.browserHost?.destroy();
       this.browserHost = null;
       this.window = null;
@@ -214,22 +231,32 @@ export class MainWindow {
     // 1. Update central security policies
     this.session.getPolicy().setStaleState(this.staleStateEnabled);
 
-    // 2. Adjust OS window behavior without changing the taskbar
+    // 2. Hardware / Driver Precision Touchpad Lockdown: block 3/4-finger gestures
+    WindowsIntegration.setTouchpadLockdown(this.staleStateEnabled);
+
+    // 3. Adjust OS window behavior without changing the taskbar or ever exiting maximized/fullscreen mode
     if (this.window && !this.window.isDestroyed()) {
       if (this.staleStateEnabled) {
-        this.window.setKiosk(true);
         this.window.setAlwaysOnTop(true, 'screen-saver');
+        this.window.setFullScreen(true);
+        this.window.maximize();
         this.window.focus();
       } else {
-        this.window.setKiosk(false);
         this.window.setAlwaysOnTop(false);
+        this.window.setFullScreen(true);
+        this.window.maximize();
+        this.window.focus();
+      }
+
+      if (this.browserHost) {
+        this.browserHost.resizeToParent();
       }
 
       // Send toast notification event to the host window renderer
       this.window.webContents.send('fseb:stale-toast', { enabled: this.staleStateEnabled });
     }
 
-    // 3. Display floating toast directly into BrowserView if exam is running
+    // 4. Display floating toast directly into BrowserView if exam is running
     this.browserHost?.showStaleStateToast(this.staleStateEnabled);
 
     return this.staleStateEnabled;
@@ -385,21 +412,42 @@ export class MainWindow {
   }
 
   public async showQuitConfirmation(): Promise<void> {
-    if (!this.window) return;
-    const result = await dialog.showMessageBox(this.window, {
-      type: 'question',
-      buttons: ['Quit Exam', 'Cancel'],
-      defaultId: 1,
-      cancelId: 1,
-      title: 'Quit Safe Exam Browser',
-      message: 'Are you sure you want to quit the exam session?',
-      detail: 'Exiting now will terminate your exam attempt. Any unsaved answers may be lost.',
-      noLink: true,
-    });
-    if (result.response === 0) {
-      MainWindow.logger.info('MainWindow', 'User confirmed exam quit. Closing application.');
-      this.session.transitionTo(SessionState.CLOSING);
-      app.quit();
+    if (!this.window || this.window.isDestroyed()) return;
+    if (this.isShowingQuitConfirmation) return;
+    this.isShowingQuitConfirmation = true;
+
+    try {
+      const wasAlwaysOnTop = this.window.isAlwaysOnTop();
+      if (wasAlwaysOnTop) {
+        this.window.setAlwaysOnTop(false);
+      }
+
+      const result = await dialog.showMessageBox(this.window, {
+        type: 'question',
+        buttons: ['Quit Exam', 'Cancel'],
+        defaultId: 1,
+        cancelId: 1,
+        title: 'Quit Safe Exam Browser',
+        message: 'Are you sure you want to quit the exam session?',
+        detail: 'Exiting now will terminate your exam attempt. Any unsaved answers may be lost.',
+        noLink: true,
+      });
+
+      if (result.response === 0) {
+        MainWindow.logger.info('MainWindow', 'User confirmed exam quit. Closing application.');
+        this.session.transitionTo(SessionState.CLOSING);
+        WindowsIntegration.setTouchpadLockdown(false);
+        app.quit();
+      } else {
+        if (this.staleStateEnabled && this.window && !this.window.isDestroyed()) {
+          this.window.setAlwaysOnTop(true, 'screen-saver');
+          this.window.focus();
+        }
+      }
+    } catch (err) {
+      MainWindow.logger.error('MainWindow', 'Error displaying quit dialog', { error: String(err) });
+    } finally {
+      this.isShowingQuitConfirmation = false;
     }
   }
 

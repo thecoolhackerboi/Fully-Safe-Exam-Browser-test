@@ -113,6 +113,9 @@ export class KeyboardPolicy {
       if (ctrl && (key === 'arrowleft' || key === 'arrowright' || key === 'left' || key === 'right')) {
         return this.block('Virtual desktop switching is locked down in Stale State.');
       }
+      if ((key === 'arrowup' || key === 'arrowdown' || key === 'up' || key === 'down') && (meta || (ctrl && meta))) {
+        return this.block('Task view and window navigation are locked down in Stale State.');
+      }
       if (alt && key === 'escape') {
         return this.block('Window cycling (Alt+Esc) is locked down in Stale State.');
       }

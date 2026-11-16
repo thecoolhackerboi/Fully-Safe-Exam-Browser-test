@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
-import { execSync } from 'child_process';
+import { execSync, exec } from 'child_process';
 import { app } from 'electron';
 import { Logger } from '../Core/Logger';
 
@@ -203,6 +203,95 @@ export class WindowsIntegration {
       this.logger.info('WindowsIntegration', 'Unregistered FSEB protocol handlers from Windows Registry.');
       return true;
     } catch {
+      return false;
+    }
+  }
+
+  private static savedTouchpadSettings: Record<string, number> | null = null;
+
+  /**
+   * Hardware & Driver Precision Touchpad lockdown:
+   * Disables or restores Precision Touchpad 3-finger and 4-finger gestures (virtual desktop switches,
+   * task view, show desktop) at the Windows OS driver level.
+   */
+  public static setTouchpadLockdown(lockdown: boolean): boolean {
+    if (process.platform !== 'win32') return false;
+
+    const keyPath = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\PrecisionTouchPad';
+    const settingNames = [
+      'FourFingerSlideEnabled',
+      'ThreeFingerSlideEnabled',
+      'FourFingerTapEnabled',
+      'ThreeFingerTapEnabled',
+      'FourFingerUp',
+      'FourFingerDown',
+      'FourFingerLeft',
+      'FourFingerRight',
+      'ThreeFingerUp',
+      'ThreeFingerDown',
+      'ThreeFingerLeft',
+      'ThreeFingerRight',
+    ];
+
+    try {
+      if (lockdown) {
+        // Query and save current settings before locking down if not already saved
+        if (!this.savedTouchpadSettings) {
+          this.savedTouchpadSettings = {};
+          for (const name of settingNames) {
+            try {
+              const out = execSync(`reg query "${keyPath}" /v "${name}"`, {
+                stdio: ['ignore', 'pipe', 'ignore'],
+                encoding: 'utf8',
+              });
+              const match = out.match(/REG_DWORD\s+0x([0-9a-fA-F]+)/);
+              if (match) {
+                this.savedTouchpadSettings[name] = parseInt(match[1], 16);
+              }
+            } catch {
+              // Setting might not exist in registry; ignored
+            }
+          }
+        }
+
+        // Lock down: set all slide/gesture values to 0 (Nothing)
+        for (const name of settingNames) {
+          try {
+            execSync(`reg add "${keyPath}" /v "${name}" /t REG_DWORD /d 0 /f`, { stdio: 'ignore' });
+          } catch {}
+        }
+        this.logger.info('WindowsIntegration', 'Precision Touchpad 3/4-finger gestures locked down in Windows registry.');
+      } else {
+        // Restore original settings
+        if (this.savedTouchpadSettings) {
+          for (const [name, val] of Object.entries(this.savedTouchpadSettings)) {
+            try {
+              execSync(`reg add "${keyPath}" /v "${name}" /t REG_DWORD /d ${val} /f`, { stdio: 'ignore' });
+            } catch {}
+          }
+          this.savedTouchpadSettings = null;
+        } else {
+          // If no previous values were captured, restore standard Windows defaults
+          try {
+            execSync(`reg add "${keyPath}" /v "FourFingerSlideEnabled" /t REG_DWORD /d 2 /f`, { stdio: 'ignore' });
+            execSync(`reg add "${keyPath}" /v "FourFingerUp" /t REG_DWORD /d 2 /f`, { stdio: 'ignore' });
+            execSync(`reg add "${keyPath}" /v "FourFingerDown" /t REG_DWORD /d 3 /f`, { stdio: 'ignore' });
+            execSync(`reg add "${keyPath}" /v "FourFingerLeft" /t REG_DWORD /d 4 /f`, { stdio: 'ignore' });
+            execSync(`reg add "${keyPath}" /v "FourFingerRight" /t REG_DWORD /d 4 /f`, { stdio: 'ignore' });
+          } catch {}
+        }
+        this.logger.info('WindowsIntegration', 'Precision Touchpad gestures restored to original settings.');
+      }
+
+      // Notify the Windows Touchpad service via WM_SETTINGCHANGE broadcast
+      try {
+        const notifyCmd = `powershell -NoProfile -NonInteractive -Command "$sig = '[DllImport(\\"user32.dll\\", SetLastError = true, CharSet = CharSet.Auto)] public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);'; Add-Type -MemberDefinition $sig -Name 'Win32TouchChange' -Namespace 'Win32' -ErrorAction SilentlyContinue; $res = [UIntPtr]::Zero; [Win32.Win32TouchChange]::SendMessageTimeout([IntPtr]0xffff, 0x001A, [UIntPtr]::Zero, 'Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\PrecisionTouchPad', 2, 100, [ref]$res)"`;
+        exec(notifyCmd, () => {});
+      } catch {}
+
+      return true;
+    } catch (err) {
+      this.logger.warn('WindowsIntegration', 'Failed to update Precision Touchpad settings', { error: String(err) });
       return false;
     }
   }

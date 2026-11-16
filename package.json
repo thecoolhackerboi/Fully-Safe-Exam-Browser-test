@@ -1,7 +1,7 @@
 {
   "name": "fseb",
   "productName": "FSEB",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "FSEB — Fully Safe Exam Browser",
   "main": "dist/main.js",
   "scripts": {

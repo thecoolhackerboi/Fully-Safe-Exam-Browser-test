@@ -21,7 +21,7 @@ export class AppConfiguration {
 
     this.metadata = {
       name: 'FSEB — Fully Safe Exam Browser',
-      version: '0.1.0',
+      version: '0.2.0',
       description: 'Authorized secure desktop examination browser',
       isPackaged,
       userDataPath,

@@ -116,17 +116,21 @@ export function runPoliciesTests() {
   const staleF11 = keyboardPolicy.evaluateKeyEvent({ type: 'keyDown', key: 'f11' });
   console.assert(staleF11.allowed === false, 'Test 6.6 Failed: F11 must be blocked in Stale State');
 
-  // Student editing must remain functional in Stale State
+  // Student clipboard operations must be blocked in Stale State
   const staleCopy = keyboardPolicy.evaluateKeyEvent({ type: 'keyDown', key: 'c', control: true });
-  console.assert(staleCopy.allowed === true, 'Test 6.7 Failed: Ctrl+C must still work in Stale State');
+  console.assert(staleCopy.allowed === false, 'Test 6.7 Failed: Ctrl+C must be blocked in Stale State');
   const stalePaste = keyboardPolicy.evaluateKeyEvent({ type: 'keyDown', key: 'v', control: true });
-  console.assert(stalePaste.allowed === true, 'Test 6.8 Failed: Ctrl+V must still work in Stale State');
+  console.assert(stalePaste.allowed === false, 'Test 6.8 Failed: Ctrl+V must be blocked in Stale State');
 
   // Reverting Stale State to false
   keyboardPolicy.setStaleState(false);
   console.assert(keyboardPolicy.isStaleState() === false, 'Test 6.9 Failed: staleState must be false');
   const restoredAltTab = keyboardPolicy.evaluateKeyEvent({ type: 'keyDown', key: 'tab', alt: true });
   console.assert(restoredAltTab.allowed === true, 'Test 6.10 Failed: Alt+Tab must be allowed when Stale State is off');
+  const restoredCopy = keyboardPolicy.evaluateKeyEvent({ type: 'keyDown', key: 'c', control: true });
+  console.assert(restoredCopy.allowed === true, 'Test 6.11 Failed: Ctrl+C must be re-enabled when Stale State is off');
+  const restoredPaste = keyboardPolicy.evaluateKeyEvent({ type: 'keyDown', key: 'v', control: true });
+  console.assert(restoredPaste.allowed === true, 'Test 6.12 Failed: Ctrl+V must be re-enabled when Stale State is off');
   console.log('✔ Test 6: Stale State toggles strict lockdown (Alt+Tab, Win+Tab, virtual desktops) and restores cleanly');
 }
 

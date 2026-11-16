@@ -165,8 +165,8 @@ FSEB intercepts and satisfies each verification layer seamlessly without requiri
        - `Ctrl + Left/Right Arrow` & `Ctrl + Win + Left/Right Arrow` (Virtual desktop switches)
        - `Alt + Esc` (Window cycling)
        - `F11` (Manual fullscreen toggling)
-     - Preserves student editor shortcuts (`Ctrl+C`, `Ctrl+V`, `Ctrl+A`) so the code editor remains operable.
-     - When `staleState` is **INACTIVE (Liberated)**, keyboard filtering returns to standard developer mode.
+       - `Ctrl+C`, `Ctrl+V`, `Ctrl+X` & `Alt+C`, `Alt+V`, `Alt+X` (Clipboard operations completely disabled across low-level OS hook and Chromium event stream)
+     - When `staleState` is **INACTIVE (Liberated)**, clipboard operations (`Ctrl+C`, `Ctrl+V`, `Ctrl+X`) and window navigation are instantly re-enabled.
   3. **4-Finger Trackpad Gesture & Virtual Desktop Neutralization (`src/UI/MainWindow.ts`):**
      - Windows 10/11 four-finger trackpad horizontal swipes switch virtual desktops by blurring the foreground window.
      - When Stale State is active, `MainWindow` hooks into `window.on('blur')`. If an external blur or desktop switch is detected, FSEB immediately executes:

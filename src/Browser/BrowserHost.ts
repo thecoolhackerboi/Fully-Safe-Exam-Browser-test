@@ -306,9 +306,13 @@ export class BrowserHost {
         }
       }
 
-      // Alt+C, Alt+V, Alt+X, Alt+A, Alt+M shortcuts
+      // Alt+C, Alt+V, Alt+X, Alt+A, Alt+M shortcuts (suppressed in Stale State)
       if (input.alt && !input.control && !input.meta && input.type === 'keyDown') {
         const k = input.key.toLowerCase();
+        if (this.policy.isStaleState() && (k === 'c' || k === 'v' || k === 'x' || k === 'm')) {
+          event.preventDefault();
+          return;
+        }
         if (k === 'c') {
           webContents.copy();
           event.preventDefault();

@@ -52,7 +52,20 @@ export class KeyboardPolicy {
     const alt = Boolean(event.alt);
     const shift = Boolean(event.shift);
 
-    // 1. Explicitly permitted student clipboard & editing operations
+    // 0. Stale State strict lockdown: Copy (Ctrl+C), Paste (Ctrl+V), and Cut (Ctrl+X) are completely blocked
+    if (this.staleState) {
+      if (ctrl && !alt && (key === 'c' || key === 'v' || key === 'x')) {
+        return this.block('Clipboard operations (Ctrl+C, Ctrl+V, Ctrl+X) are disabled in Stale State.');
+      }
+      if (alt && !ctrl && (key === 'c' || key === 'v' || key === 'x')) {
+        return this.block('Clipboard operations (Alt+C, Alt+V, Alt+X) are disabled in Stale State.');
+      }
+      if (key === 'insert' && (ctrl || shift)) {
+        return this.block('Insert clipboard operations are disabled in Stale State.');
+      }
+    }
+
+    // 1. Explicitly permitted student clipboard & editing operations (when Stale State is off)
     if (ctrl && !alt) {
       if (key === 'c' || (shift && key === 'c')) {
         if (!this.config.clipboard.copy) {

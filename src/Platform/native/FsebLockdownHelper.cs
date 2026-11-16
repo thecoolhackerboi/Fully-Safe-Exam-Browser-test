@@ -28,6 +28,11 @@ namespace FSEB.Native
         private const int VK_D = 0x44;
         private const int VK_M = 0x4D;
         private const int VK_L = 0x4C;
+        private const int VK_C = 0x43;
+        private const int VK_V = 0x56;
+        private const int VK_X = 0x58;
+        private const int VK_INSERT = 0x2D;
+        private const int VK_SHIFT = 0x10;
 
         private const int SW_HIDE = 0;
         private const int SW_SHOW = 5;
@@ -383,6 +388,20 @@ namespace FSEB.Native
                     if (kbd.vkCode == VK_ESCAPE && (isAlt || isCtrl))
                     {
                         return (IntPtr)1;
+                    }
+
+                    // 5. Block Clipboard operations (Ctrl+C, Ctrl+V, Ctrl+X, Alt+C, Alt+V, Alt+X, Ctrl+Insert, Shift+Insert) in Stale State
+                    if ((kbd.vkCode == VK_C || kbd.vkCode == VK_V || kbd.vkCode == VK_X) && (isCtrl || isAlt))
+                    {
+                        return (IntPtr)1;
+                    }
+                    if (kbd.vkCode == VK_INSERT)
+                    {
+                        bool isShift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+                        if (isCtrl || isShift)
+                        {
+                            return (IntPtr)1;
+                        }
                     }
                 }
             }

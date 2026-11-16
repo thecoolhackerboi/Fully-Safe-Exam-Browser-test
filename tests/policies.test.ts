@@ -96,5 +96,37 @@ export function runPoliciesTests() {
   // 5. DeveloperTools Policy check
   console.assert(devToolsPolicy.canOpenDevTools() === false, 'Test 5.1 Failed: DevTools disabled by default');
   console.log('✔ Test 5: DeveloperToolsPolicy disables DevTools by default');
+
+  // 6. Stale State (Strict Lockdown) checks
+  keyboardPolicy.setStaleState(true);
+  console.assert(keyboardPolicy.isStaleState() === true, 'Test 6.1 Failed: staleState must be true');
+
+  const staleAltTab = keyboardPolicy.evaluateKeyEvent({ type: 'keyDown', key: 'tab', alt: true });
+  console.assert(staleAltTab.allowed === false, 'Test 6.2 Failed: Alt+Tab must be blocked in Stale State');
+
+  const staleWinTab = keyboardPolicy.evaluateKeyEvent({ type: 'keyDown', key: 'tab', meta: true });
+  console.assert(staleWinTab.allowed === false, 'Test 6.3 Failed: Win+Tab must be blocked in Stale State');
+
+  const staleVirtualDesktop = keyboardPolicy.evaluateKeyEvent({ type: 'keyDown', key: 'arrowleft', control: true, meta: true });
+  console.assert(staleVirtualDesktop.allowed === false, 'Test 6.4 Failed: Virtual desktop must be blocked in Stale State');
+
+  const staleAltEsc = keyboardPolicy.evaluateKeyEvent({ type: 'keyDown', key: 'escape', alt: true });
+  console.assert(staleAltEsc.allowed === false, 'Test 6.5 Failed: Alt+Esc must be blocked in Stale State');
+
+  const staleF11 = keyboardPolicy.evaluateKeyEvent({ type: 'keyDown', key: 'f11' });
+  console.assert(staleF11.allowed === false, 'Test 6.6 Failed: F11 must be blocked in Stale State');
+
+  // Student editing must remain functional in Stale State
+  const staleCopy = keyboardPolicy.evaluateKeyEvent({ type: 'keyDown', key: 'c', control: true });
+  console.assert(staleCopy.allowed === true, 'Test 6.7 Failed: Ctrl+C must still work in Stale State');
+  const stalePaste = keyboardPolicy.evaluateKeyEvent({ type: 'keyDown', key: 'v', control: true });
+  console.assert(stalePaste.allowed === true, 'Test 6.8 Failed: Ctrl+V must still work in Stale State');
+
+  // Reverting Stale State to false
+  keyboardPolicy.setStaleState(false);
+  console.assert(keyboardPolicy.isStaleState() === false, 'Test 6.9 Failed: staleState must be false');
+  const restoredAltTab = keyboardPolicy.evaluateKeyEvent({ type: 'keyDown', key: 'tab', alt: true });
+  console.assert(restoredAltTab.allowed === true, 'Test 6.10 Failed: Alt+Tab must be allowed when Stale State is off');
+  console.log('✔ Test 6: Stale State toggles strict lockdown (Alt+Tab, Win+Tab, virtual desktops) and restores cleanly');
 }
 

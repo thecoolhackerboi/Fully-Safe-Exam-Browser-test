@@ -277,6 +277,51 @@
             break;
         }
       });
+
+      if (window.fsebAPI.onStaleToast) {
+        window.fsebAPI.onStaleToast((data) => {
+          const old = document.getElementById('fseb-stale-toast');
+          if (old) old.remove();
+
+          const toast = document.createElement('div');
+          toast.id = 'fseb-stale-toast';
+          const isOn = Boolean(data && data.enabled);
+          toast.innerHTML = isOn
+            ? '<div style="display:flex;align-items:center;gap:12px;"><span style="font-size:20px;line-height:1;">🔒</span><div><div style="font-weight:700;font-size:13px;letter-spacing:0.6px;color:#38bdf8;">STALE STATE: ON</div><div style="font-size:11px;color:#cbd5e1;margin-top:2px;">Strict Lockdown Active &bull; Alt+Tab & Gestures Blocked</div></div></div>'
+            : '<div style="display:flex;align-items:center;gap:12px;"><span style="font-size:20px;line-height:1;">🔓</span><div><div style="font-weight:700;font-size:13px;letter-spacing:0.6px;color:#94a3b8;">STALE STATE: OFF</div><div style="font-size:11px;color:#94a3b8;margin-top:2px;">Liberated Mode &bull; Window Switching Enabled</div></div></div>';
+
+          toast.style.cssText = [
+            'position: fixed',
+            'top: 24px',
+            'left: 50%',
+            'z-index: 2147483647',
+            'background: ' + (isOn ? 'rgba(15, 23, 42, 0.95)' : 'rgba(24, 24, 27, 0.95)'),
+            'border: 1px solid ' + (isOn ? '#0284c7' : '#3f3f46'),
+            'box-shadow: 0 10px 25px -5px rgba(0,0,0,0.7), 0 0 20px ' + (isOn ? 'rgba(56, 189, 248, 0.35)' : 'rgba(0,0,0,0.3)'),
+            'padding: 10px 22px',
+            'border-radius: 9999px',
+            'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+            'pointer-events: none',
+            'transition: opacity 0.3s ease, transform 0.3s ease',
+            'opacity: 0',
+            'transform: translate(-50%, -10px)'
+          ].join(';');
+
+          document.body.appendChild(toast);
+          requestAnimationFrame(() => {
+            toast.style.opacity = '1';
+            toast.style.transform = 'translate(-50%, 0)';
+          });
+
+          setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translate(-50%, -10px)';
+            setTimeout(() => {
+              if (toast.parentNode) toast.parentNode.removeChild(toast);
+            }, 350);
+          }, 2400);
+        });
+      }
     }
 
     // Drag and drop or clicking the mini .seb icon to open a config

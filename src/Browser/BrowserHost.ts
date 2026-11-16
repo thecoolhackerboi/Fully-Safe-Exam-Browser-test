@@ -10,6 +10,7 @@ export interface BrowserHostOptions {
   onLoadingStatusChanged?: (isLoading: boolean) => void;
   onLoadError?: (errorDescription: string) => void;
   onQuitRequested?: () => void;
+  onToggleStaleState?: () => void;
 }
 
 export class BrowserHost {
@@ -122,6 +123,62 @@ export class BrowserHost {
   }
 
   /**
+   * Displays a floating toast notification inside the BrowserView indicating Stale State
+   */
+  public showStaleStateToast(enabled: boolean): void {
+    if (!this.browserView || this.browserView.webContents.isDestroyed()) return;
+
+    const toastScript = `
+      (function() {
+        try {
+          var old = document.getElementById('fseb-stale-toast');
+          if (old) old.remove();
+
+          var toast = document.createElement('div');
+          toast.id = 'fseb-stale-toast';
+          var isOn = ${Boolean(enabled)};
+          toast.innerHTML = isOn
+            ? '<div style="display:flex;align-items:center;gap:12px;"><span style="font-size:20px;line-height:1;">🔒</span><div><div style="font-weight:700;font-size:13px;letter-spacing:0.6px;color:#38bdf8;">STALE STATE: ON</div><div style="font-size:11px;color:#cbd5e1;margin-top:2px;">Strict Lockdown Active &bull; Alt+Tab & Gestures Blocked</div></div></div>'
+            : '<div style="display:flex;align-items:center;gap:12px;"><span style="font-size:20px;line-height:1;">🔓</span><div><div style="font-weight:700;font-size:13px;letter-spacing:0.6px;color:#94a3b8;">STALE STATE: OFF</div><div style="font-size:11px;color:#94a3b8;margin-top:2px;">Liberated Mode &bull; Window Switching Enabled</div></div></div>';
+
+          toast.style.cssText = [
+            'position: fixed !important',
+            'top: 24px !important',
+            'left: 50% !important',
+            'z-index: 2147483647 !important',
+            'background: ' + (isOn ? 'rgba(15, 23, 42, 0.95)' : 'rgba(24, 24, 27, 0.95)') + ' !important',
+            'border: 1px solid ' + (isOn ? '#0284c7' : '#3f3f46') + ' !important',
+            'box-shadow: 0 10px 25px -5px rgba(0,0,0,0.7), 0 0 20px ' + (isOn ? 'rgba(56, 189, 248, 0.35)' : 'rgba(0,0,0,0.3)') + ' !important',
+            'padding: 10px 22px !important',
+            'border-radius: 9999px !important',
+            'font-family: -apple-system, BlinkMacSystemFont, \\"Segoe UI\\", Roboto, sans-serif !important',
+            'pointer-events: none !important',
+            'transition: opacity 0.3s ease, transform 0.3s ease !important',
+            'opacity: 0 !important',
+            'transform: translate(-50%, -10px) !important'
+          ].join(';');
+
+          (document.body || document.documentElement).appendChild(toast);
+          requestAnimationFrame(function() {
+            toast.style.opacity = '1';
+            toast.style.transform = 'translate(-50%, 0)';
+          });
+
+          setTimeout(function() {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translate(-50%, -10px)';
+            setTimeout(function() {
+              if (toast.parentNode) toast.parentNode.removeChild(toast);
+            }, 350);
+          }, 2400);
+        } catch (e) {}
+      })();
+    `;
+
+    this.browserView.webContents.executeJavaScript(toastScript).catch(() => {});
+  }
+
+  /**
    * Initializes the Chromium BrowserView and attaches security and navigation policies
    */
   public initialize(): void {
@@ -228,6 +285,16 @@ export class BrowserHost {
         this.showClipboardMenu();
         event.preventDefault();
         return;
+      }
+
+      // Ctrl+Alt+L secret combination to toggle Stale State (Strict Lockdown vs Liberated)
+      if (input.control && input.alt && !input.meta && input.type === 'keyDown') {
+        const k = input.key.toLowerCase();
+        if (k === 'l') {
+          this.options.onToggleStaleState?.();
+          event.preventDefault();
+          return;
+        }
       }
 
       // Alt+C, Alt+V, Alt+X, Alt+A, Alt+M shortcuts

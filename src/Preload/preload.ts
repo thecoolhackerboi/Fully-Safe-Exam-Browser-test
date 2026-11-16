@@ -14,6 +14,7 @@ export interface FsebAPI {
   getAppInfo: () => Promise<AppInfo>;
   onStateUpdate: (callback: (state: string, details?: Record<string, unknown>) => void) => void;
   onShowQuitModal: (callback: () => void) => void;
+  onStaleToast: (callback: (data: { enabled: boolean }) => void) => void;
 }
 
 const api: FsebAPI = {
@@ -31,6 +32,11 @@ const api: FsebAPI = {
   onShowQuitModal: (callback) => {
     ipcRenderer.on('fseb:show-quit-modal', () => {
       callback();
+    });
+  },
+  onStaleToast: (callback) => {
+    ipcRenderer.on('fseb:stale-toast', (_event, data) => {
+      callback(data);
     });
   },
 };

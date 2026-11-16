@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { BrowserWindow, dialog, ipcMain, app } from 'electron';
+import { BrowserWindow, dialog, ipcMain, app, globalShortcut } from 'electron';
 import { ExamSession, SessionState } from '../Core/ExamSession';
 import { BrowserHost } from '../Browser/BrowserHost';
 import { SebLoader } from '../Configuration/SebLoader';
@@ -14,6 +14,7 @@ export class MainWindow {
   private readonly session: ExamSession;
   private currentSebPath: string | null = null;
   private pendingTarget: string | null = null;
+  private staleStateEnabled: boolean = false;
 
   constructor(session: ExamSession) {
     this.session = session;
@@ -96,6 +97,9 @@ export class MainWindow {
       onQuitRequested: () => {
         this.showQuitConfirmation();
       },
+      onToggleStaleState: () => {
+        this.toggleStaleState();
+      },
     });
 
     // Window focus and blur handling
@@ -104,8 +108,32 @@ export class MainWindow {
     });
 
     this.window.on('blur', () => {
+      if (this.staleStateEnabled && this.window && !this.window.isDestroyed()) {
+        this.window.show();
+        this.window.focus();
+        this.window.setAlwaysOnTop(true, 'screen-saver');
+      }
       this.session.handleFocusChange(false);
     });
+
+    // Intercept Ctrl+Alt+L on main window webContents (for splash/unconfigured views)
+    this.window.webContents.on('before-input-event', (event, input) => {
+      if (input.control && input.alt && !input.meta && input.type === 'keyDown') {
+        if (input.key.toLowerCase() === 'l') {
+          this.toggleStaleState();
+          event.preventDefault();
+        }
+      }
+    });
+
+    // Global shortcut to capture Ctrl+Alt+L even when child views or native controls have focus
+    try {
+      globalShortcut.register('CommandOrControl+Alt+L', () => {
+        this.toggleStaleState();
+      });
+    } catch (e) {
+      MainWindow.logger.warn('MainWindow', 'Failed to register global shortcut CommandOrControl+Alt+L');
+    }
 
     this.window.on('resize', () => {
       if (this.session.getState() === SessionState.EXAM_RUNNING && this.browserHost) {
@@ -158,6 +186,9 @@ export class MainWindow {
     });
 
     this.window.on('closed', () => {
+      try {
+        globalShortcut.unregister('CommandOrControl+Alt+L');
+      } catch (e) {}
       this.browserHost?.destroy();
       this.browserHost = null;
       this.window = null;
@@ -168,6 +199,44 @@ export class MainWindow {
     });
 
     return this.window;
+  }
+
+  /**
+   * Toggles the Stale State (strict lockdown mode vs liberated mode)
+   */
+  public toggleStaleState(): boolean {
+    this.staleStateEnabled = !this.staleStateEnabled;
+    MainWindow.logger.info(
+      'MainWindow',
+      `Toggled Stale State: ${this.staleStateEnabled ? 'ACTIVE (Strict Lockdown)' : 'INACTIVE (Liberated)'}`
+    );
+
+    // 1. Update central security policies
+    this.session.getPolicy().setStaleState(this.staleStateEnabled);
+
+    // 2. Adjust OS window behavior without changing the taskbar
+    if (this.window && !this.window.isDestroyed()) {
+      if (this.staleStateEnabled) {
+        this.window.setKiosk(true);
+        this.window.setAlwaysOnTop(true, 'screen-saver');
+        this.window.focus();
+      } else {
+        this.window.setKiosk(false);
+        this.window.setAlwaysOnTop(false);
+      }
+
+      // Send toast notification event to the host window renderer
+      this.window.webContents.send('fseb:stale-toast', { enabled: this.staleStateEnabled });
+    }
+
+    // 3. Display floating toast directly into BrowserView if exam is running
+    this.browserHost?.showStaleStateToast(this.staleStateEnabled);
+
+    return this.staleStateEnabled;
+  }
+
+  public isStaleState(): boolean {
+    return this.staleStateEnabled;
   }
 
   /**

@@ -54,6 +54,14 @@ export class ExamPolicy {
     return this.config;
   }
 
+  public setStaleState(enabled: boolean): void {
+    this.keyboard.setStaleState(enabled);
+  }
+
+  public isStaleState(): boolean {
+    return this.keyboard.isStaleState();
+  }
+
   // Unified convenience methods for decision making
   public evaluateKey(event: KeyInputEvent): KeyDecision {
     return this.keyboard.evaluateKeyEvent(event);

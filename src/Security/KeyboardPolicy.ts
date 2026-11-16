@@ -20,6 +20,7 @@ export interface KeyDecision {
 export class KeyboardPolicy {
   private static readonly logger = Logger.getInstance();
   private config: ExamConfiguration;
+  private staleState: boolean = false;
 
   constructor(config: ExamConfiguration) {
     this.config = config;
@@ -27,6 +28,15 @@ export class KeyboardPolicy {
 
   public updateConfiguration(config: ExamConfiguration): void {
     this.config = config;
+  }
+
+  public setStaleState(enabled: boolean): void {
+    this.staleState = enabled;
+    KeyboardPolicy.logger.info('KeyboardPolicy', `Stale State (Strict Lockdown) set to: ${enabled ? 'ACTIVE' : 'INACTIVE'}`);
+  }
+
+  public isStaleState(): boolean {
+    return this.staleState;
   }
 
   /**
@@ -91,6 +101,26 @@ export class KeyboardPolicy {
 
     // 2. Window switching: Alt+Tab, Win+Tab, and Ctrl+Win+Arrow (Virtual Desktops)
     const meta = Boolean(event.meta);
+
+    // Stale State (Strict Lockdown): Block all window switches, desktop gestures, and OS navigation
+    if (this.staleState) {
+      if ((alt && key === 'tab') || (meta && key === 'tab')) {
+        return this.block('Alt+Tab / Win+Tab window switching is locked down in Stale State.');
+      }
+      if (meta) {
+        return this.block('Windows key combinations are locked down in Stale State.');
+      }
+      if (ctrl && (key === 'arrowleft' || key === 'arrowright' || key === 'left' || key === 'right')) {
+        return this.block('Virtual desktop switching is locked down in Stale State.');
+      }
+      if (alt && key === 'escape') {
+        return this.block('Window cycling (Alt+Esc) is locked down in Stale State.');
+      }
+      if (key === 'f11') {
+        return this.block('Fullscreen toggle (F11) is locked down in Stale State.');
+      }
+    }
+
     if ((alt && key === 'tab') || (meta && key === 'tab')) {
       if (this.config.windowSwitching) {
         return { allowed: true };

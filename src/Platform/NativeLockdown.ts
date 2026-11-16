@@ -87,6 +87,22 @@ export class NativeLockdown {
   }
 
   /**
+   * Binds the Electron window HWND to the native helper for pinning to all virtual desktops
+   * and automatic foreground reclamation
+   */
+  public static attachWindow(hwnd: number | bigint | string): void {
+    if (!this.helperProcess || !this.helperProcess.stdin || this.helperProcess.stdin.destroyed) {
+      return;
+    }
+    try {
+      this.helperProcess.stdin.write(`ATTACH ${hwnd.toString()}\n`);
+      this.logger.info('NativeLockdown', `Attached window handle ${hwnd.toString()} to native helper.`);
+    } catch (err) {
+      this.logger.warn('NativeLockdown', 'Failed to send window handle to native helper', { error: String(err) });
+    }
+  }
+
+  /**
    * Instantly toggles strict lockdown (WH_KEYBOARD_LL swallowing Alt+Tab, Win keys, and hiding Windows taskbar)
    * Executes in sub-millisecond time via background process stdin.
    */

@@ -267,8 +267,13 @@ export class BrowserHost {
     let altPressedAlone = false;
 
     webContents.on('before-input-event', (event, input) => {
-      // Handle Alt key tap to bring up copy/clipboard menu
+      // Handle Alt key tap to bring up copy/clipboard menu (suppressed in Stale State)
       if (input.key === 'Alt') {
+        if (this.policy.isStaleState()) {
+          altPressedAlone = false;
+          event.preventDefault();
+          return;
+        }
         if (input.type === 'keyDown' && !input.isAutoRepeat) {
           altPressedAlone = true;
         } else if (input.type === 'keyUp' && altPressedAlone) {
@@ -280,8 +285,12 @@ export class BrowserHost {
         altPressedAlone = false;
       }
 
-      // ContextMenu key or Shift+F10 opens copy menu
+      // ContextMenu key or Shift+F10 opens copy menu (suppressed in Stale State)
       if (input.key === 'ContextMenu' || (input.shift && input.key === 'F10')) {
+        if (this.policy.isStaleState()) {
+          event.preventDefault();
+          return;
+        }
         this.showClipboardMenu();
         event.preventDefault();
         return;

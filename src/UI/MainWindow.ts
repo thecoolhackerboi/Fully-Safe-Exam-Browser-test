@@ -90,7 +90,12 @@ export class MainWindow {
 
     try {
       this.window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-    } catch {}
+      const handleBuf = this.window.getNativeWindowHandle();
+      const hwnd = process.arch === 'x64' ? handleBuf.readBigInt64LE(0) : handleBuf.readInt32LE(0);
+      NativeLockdown.attachWindow(hwnd);
+    } catch (e) {
+      MainWindow.logger.warn('MainWindow', 'Failed to attach native window handle', { error: String(e) });
+    }
 
     // Initialize Chromium BrowserHost for exam viewing
     this.browserHost = new BrowserHost({

@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as zlib from 'zlib';
+import * as crypto from 'crypto';
 import { PlistParser } from './PlistParser';
 import { ExamConfiguration, DEFAULT_EXAM_CONFIGURATION } from './ExamConfiguration';
 import { SebValidator, ValidationResult } from './SebValidator';
@@ -419,6 +420,8 @@ export class SebLoader {
     const audioControlEnabled = dict['audioControlEnabled'] !== undefined ? Boolean(dict['audioControlEnabled']) : true;
     const quitUrl = (dict['quitURL'] as string) || (dict['quitUrl'] as string) || '/quit-seb';
 
+    const configKey = this.computeSebConfigKey(dict);
+
     return {
       ...DEFAULT_EXAM_CONFIGURATION,
       startUrl,
@@ -453,7 +456,39 @@ export class SebLoader {
       windowSwitching: dict['windowSwitching'] !== undefined ? Boolean(dict['windowSwitching']) : true,
       examTitle,
       institution,
+      configKey,
       rawSettings: dict,
     };
+  }
+
+  /**
+   * Deterministically computes the Safe Exam Browser Config Key according to SEB-JSON specification.
+   */
+  public static computeSebConfigKey(dict: Record<string, unknown>): string {
+    try {
+      function sortValue(val: unknown): unknown {
+        if (val === null || typeof val !== 'object') {
+          return val;
+        }
+        if (Array.isArray(val)) {
+          return val.map(sortValue);
+        }
+        const sorted: Record<string, unknown> = {};
+        const keys = Object.keys(val as Record<string, unknown>).sort((a, b) =>
+          a.localeCompare(b, 'en', { sensitivity: 'base' })
+        );
+        for (const k of keys) {
+          if (k === 'originatorVersion') continue;
+          sorted[k] = sortValue((val as Record<string, unknown>)[k]);
+        }
+        return sorted;
+      }
+
+      const sortedDict = sortValue(dict);
+      const minJson = JSON.stringify(sortedDict).replace(/\\\//g, '/');
+      return crypto.createHash('sha256').update(minJson, 'utf8').digest('hex');
+    } catch {
+      return '';
+    }
   }
 }

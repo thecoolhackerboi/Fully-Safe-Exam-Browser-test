@@ -99,6 +99,11 @@ export interface ExamConfiguration {
   institution?: string;
 
   /**
+   * Computed canonical Safe Exam Browser Config Key hash
+   */
+  configKey?: string;
+
+  /**
    * Raw parsed configuration keys (for debugging/diagnostics)
    */
   rawSettings?: Record<string, unknown>;

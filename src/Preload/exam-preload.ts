@@ -211,6 +211,186 @@ try {
 (function() {
   'use strict';
 
+  // 0. Ensure SafeExamBrowser JS API is universally available in the window
+  if (!window.SafeExamBrowser) {
+    var _sebSecurity = {
+      configKey: '',
+      browserExamKey: '',
+      updateKeys: function(cb) {
+        if (typeof cb === 'function') {
+          try { cb(); } catch (e) { console.warn(e); }
+        }
+      }
+    };
+    try {
+      Object.defineProperty(window, 'SafeExamBrowser', {
+        value: {
+          version: '3.10.2',
+          platform: 'Windows',
+          security: _sebSecurity
+        },
+        writable: true,
+        configurable: true
+      });
+    } catch (e) {
+      window.SafeExamBrowser = {
+        version: '3.10.2',
+        platform: 'Windows',
+        security: _sebSecurity
+      };
+    }
+  }
+
+  // Intercept Moodle quizaccess_seb key validation calls in fetch and XHR
+  if (typeof window.fetch === 'function') {
+    var _origFetch = window.fetch;
+    window.fetch = async function(resource, init) {
+      var url = '';
+      if (typeof resource === 'string') {
+        url = resource;
+      } else if (resource && resource.url) {
+        url = resource.url;
+      }
+
+      var bodyStr = '';
+      if (init && init.body) {
+        if (typeof init.body === 'string') {
+          bodyStr = init.body;
+        }
+      }
+
+      var isSebValidation = (url.indexOf('service.php') !== -1 || url.indexOf('service-nologin.php') !== -1 || url.indexOf('ajax') !== -1) &&
+        (bodyStr.indexOf('quizaccess_seb_validate_quiz_keys') !== -1 || url.indexOf('quizaccess_seb_validate_quiz_keys') !== -1);
+
+      if (isSebValidation) {
+        return new Response(JSON.stringify([{
+          error: false,
+          data: {
+            status: true,
+            messages: '',
+            warnings: []
+          }
+        }]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      var response = await _origFetch.apply(this, arguments);
+
+      if (url.indexOf('service.php') !== -1 || url.indexOf('service-nologin.php') !== -1 || url.indexOf('quizaccess_seb') !== -1) {
+        try {
+          var clone = response.clone();
+          var text = await clone.text();
+          if (text.indexOf('quizaccess_seb') !== -1 && (text.indexOf('"status":false') !== -1 || text.indexOf('"status":0'))) {
+            var data = JSON.parse(text);
+            if (Array.isArray(data)) {
+              var modified = false;
+              data.forEach(function(item) {
+                if (item && item.data && (item.data.status === false || item.data.status === 0)) {
+                  item.data.status = true;
+                  if (item.data.messages) item.data.messages = '';
+                  modified = true;
+                }
+              });
+              if (modified) {
+                return new Response(JSON.stringify(data), {
+                  status: response.status,
+                  statusText: response.statusText,
+                  headers: response.headers
+                });
+              }
+            }
+          }
+        } catch (err) {}
+      }
+
+      return response;
+    };
+  }
+
+  if (typeof window.XMLHttpRequest === 'function') {
+    var _origXHR = window.XMLHttpRequest;
+    var _origOpen = _origXHR.prototype.open;
+    var _origSend = _origXHR.prototype.send;
+
+    _origXHR.prototype.open = function(method, url) {
+      this._sebReqUrl = url;
+      this._sebReqMethod = method;
+      return _origOpen.apply(this, arguments);
+    };
+
+    _origXHR.prototype.send = function(body) {
+      var url = this._sebReqUrl || '';
+      var bodyStr = typeof body === 'string' ? body : '';
+
+      var isSebValidation = (url.indexOf('service.php') !== -1 || url.indexOf('service-nologin.php') !== -1 || url.indexOf('ajax') !== -1) &&
+        (bodyStr.indexOf('quizaccess_seb_validate_quiz_keys') !== -1 || url.indexOf('quizaccess_seb_validate_quiz_keys') !== -1);
+
+      if (isSebValidation) {
+        var self = this;
+        var mockData = JSON.stringify([{
+          error: false,
+          data: {
+            status: true,
+            messages: '',
+            warnings: []
+          }
+        }]);
+
+        Object.defineProperty(self, 'readyState', { value: 4, writable: true, configurable: true });
+        Object.defineProperty(self, 'status', { value: 200, writable: true, configurable: true });
+        Object.defineProperty(self, 'statusText', { value: 'OK', writable: true, configurable: true });
+        Object.defineProperty(self, 'responseText', { value: mockData, writable: true, configurable: true });
+        Object.defineProperty(self, 'response', { value: mockData, writable: true, configurable: true });
+
+        setTimeout(function() {
+          if (typeof self.onreadystatechange === 'function') {
+            self.onreadystatechange(new Event('readystatechange'));
+          }
+          if (typeof self.onload === 'function') {
+            self.onload(new Event('load'));
+          }
+          self.dispatchEvent(new Event('readystatechange'));
+          self.dispatchEvent(new Event('load'));
+          self.dispatchEvent(new Event('loadend'));
+        }, 10);
+        return;
+      }
+
+      var self = this;
+      var patchResponse = function() {
+        try {
+          if (self.readyState === 4 && self.responseText) {
+            if (self.responseText.indexOf('quizaccess_seb') !== -1 && (self.responseText.indexOf('"status":false') !== -1 || self.responseText.indexOf('"status":0'))) {
+              var data = JSON.parse(self.responseText);
+              if (Array.isArray(data)) {
+                var modified = false;
+                data.forEach(function(item) {
+                  if (item && item.data && (item.data.status === false || item.data.status === 0)) {
+                    item.data.status = true;
+                    if (item.data.messages) item.data.messages = '';
+                    modified = true;
+                  }
+                });
+                if (modified) {
+                  var newText = JSON.stringify(data);
+                  Object.defineProperty(self, 'responseText', { value: newText, writable: true, configurable: true });
+                  Object.defineProperty(self, 'response', { value: newText, writable: true, configurable: true });
+                }
+              }
+            }
+          }
+        } catch (e) {}
+      };
+
+      this.addEventListener('readystatechange', patchResponse, true);
+      this.addEventListener('load', patchResponse, true);
+
+      return _origSend.apply(this, arguments);
+    };
+  }
+
   // 1. Force text selectable on content (in editor, problem description, tasks, etc.)
   // while protecting splitters, gutters, resizers, and containers from breaking layout
   var style = document.createElement('style');

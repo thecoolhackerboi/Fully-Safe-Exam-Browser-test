@@ -242,14 +242,22 @@ export class BrowserHost {
       // Extract clean request URL without hash/fragment
       const cleanUrl = details.url.split('#')[0];
 
-      // Check if rawSettings contains examKeySalt or browserExamKey
+      // Check if rawSettings contains examKeySalt or browserExamKey or computed configKey
       const config = this.policy.getConfiguration();
       const raw = config.rawSettings || {};
+      const configKey = config.configKey || '';
       const examKeySalt = typeof raw['examKeySalt'] === 'string' ? raw['examKeySalt'].trim() : '';
       const configKeySalt = typeof raw['configKeySalt'] === 'string' ? raw['configKeySalt'].trim() : '';
 
-      const reqHash = crypto.createHash('sha256').update(cleanUrl + examKeySalt, 'utf8').digest('hex');
-      const confHash = crypto.createHash('sha256').update(cleanUrl + configKeySalt, 'utf8').digest('hex');
+      // Calculate ConfigKeyHash according to SEB specification:
+      // SHA256(cleanUrl + configKey)
+      const keyForConfig = configKey || configKeySalt;
+      const confHash = crypto.createHash('sha256').update(cleanUrl + keyForConfig, 'utf8').digest('hex');
+
+      // Calculate RequestHash according to SEB specification:
+      // SHA256(cleanUrl + browserExamKey / examKeySalt)
+      const keyForRequest = examKeySalt || keyForConfig;
+      const reqHash = crypto.createHash('sha256').update(cleanUrl + keyForRequest, 'utf8').digest('hex');
 
       requestHeaders['X-SafeExamBrowser-RequestHash'] = reqHash;
       requestHeaders['X-SafeExamBrowser-ConfigKeyHash'] = confHash;

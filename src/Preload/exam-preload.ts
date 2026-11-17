@@ -266,6 +266,8 @@ try {
         return new Response(JSON.stringify([{
           error: false,
           data: {
+            configkey: true,
+            browserexamkey: true,
             status: true,
             messages: '',
             warnings: []
@@ -282,12 +284,14 @@ try {
         try {
           var clone = response.clone();
           var text = await clone.text();
-          if (text.indexOf('quizaccess_seb') !== -1 && (text.indexOf('"status":false') !== -1 || text.indexOf('"status":0'))) {
+          if (text.indexOf('configkey') !== -1 || text.indexOf('quizaccess_seb') !== -1 || text.indexOf('"status":false') !== -1 || text.indexOf('"status":0')) {
             var data = JSON.parse(text);
             if (Array.isArray(data)) {
               var modified = false;
               data.forEach(function(item) {
-                if (item && item.data && (item.data.status === false || item.data.status === 0)) {
+                if (item && item.data) {
+                  item.data.configkey = true;
+                  item.data.browserexamkey = true;
                   item.data.status = true;
                   if (item.data.messages) item.data.messages = '';
                   modified = true;
@@ -332,6 +336,8 @@ try {
         var mockData = JSON.stringify([{
           error: false,
           data: {
+            configkey: true,
+            browserexamkey: true,
             status: true,
             messages: '',
             warnings: []
@@ -362,12 +368,14 @@ try {
       var patchResponse = function() {
         try {
           if (self.readyState === 4 && self.responseText) {
-            if (self.responseText.indexOf('quizaccess_seb') !== -1 && (self.responseText.indexOf('"status":false') !== -1 || self.responseText.indexOf('"status":0'))) {
+            if (self.responseText.indexOf('configkey') !== -1 || self.responseText.indexOf('quizaccess_seb') !== -1 || self.responseText.indexOf('"status":false') !== -1 || self.responseText.indexOf('"status":0')) {
               var data = JSON.parse(self.responseText);
               if (Array.isArray(data)) {
                 var modified = false;
                 data.forEach(function(item) {
-                  if (item && item.data && (item.data.status === false || item.data.status === 0)) {
+                  if (item && item.data) {
+                    item.data.configkey = true;
+                    item.data.browserexamkey = true;
                     item.data.status = true;
                     if (item.data.messages) item.data.messages = '';
                     modified = true;
@@ -390,6 +398,50 @@ try {
       return _origSend.apply(this, arguments);
     };
   }
+
+  // Auto-dismiss any Moodle SEB validation failed modal
+  function suppressMoodleSebModals() {
+    try {
+      var modals = document.querySelectorAll('.moodle-dialogue, .modal, [class*="modal"]');
+      for (var i = 0; i < modals.length; i++) {
+        var m = modals[i];
+        var text = (m.innerText || m.textContent || '').toLowerCase();
+        if (text.indexOf('keys could not be validated') !== -1 || text.indexOf('sebkeysvalidationfailed') !== -1 || text.indexOf('invalidkeys') !== -1) {
+          m.remove();
+          var bds = document.querySelectorAll('.modal-backdrop, .moodle-has-zindex');
+          for (var j = 0; j < bds.length; j++) bds[j].remove();
+          if (document.body) document.body.classList.remove('modal-open');
+        }
+      }
+      var loadingAlert = document.querySelector('.seb-loading');
+      if (loadingAlert) loadingAlert.remove();
+    } catch (e) {}
+  }
+  setInterval(suppressMoodleSebModals, 200);
+
+  // Auto-unlock Moodle quiz attempt button
+  function unlockMoodleQuizAttempts() {
+    try {
+      var attemptContainer = document.querySelector('.quizattempt');
+      if (attemptContainer && !document.getElementById('fseb-unlocked-attempt-form')) {
+        var launchLink = attemptContainer.querySelector('a[href*="config.php"], form[action*="download"]');
+        if (launchLink) {
+          var cmidMatch = window.location.search.match(/[?&]id=(\d+)/);
+          var cmid = cmidMatch ? cmidMatch[1] : '';
+          var sesskeyInput = document.querySelector('input[name="sesskey"]');
+          var sesskey = sesskeyInput ? sesskeyInput.value : (window.M && window.M.cfg ? window.M.cfg.sesskey : '');
+          if (cmid && sesskey) {
+            var formDiv = document.createElement('div');
+            formDiv.id = 'fseb-unlocked-attempt-form';
+            formDiv.style.margin = '15px 0';
+            formDiv.innerHTML = '<form method="post" action="https://safeexambrowser.moodle.ch/lms/mod/quiz/startattempt.php"><input type="hidden" name="cmid" value="' + cmid + '"><input type="hidden" name="sesskey" value="' + sesskey + '"><button type="submit" class="btn btn-primary btn-lg" style="font-weight:600;padding:10px 24px;">Attempt quiz now</button></form>';
+            attemptContainer.appendChild(formDiv);
+          }
+        }
+      }
+    } catch (e) {}
+  }
+  setInterval(unlockMoodleQuizAttempts, 400);
 
   // 1. Force text selectable on content (in editor, problem description, tasks, etc.)
   // while protecting splitters, gutters, resizers, and containers from breaking layout

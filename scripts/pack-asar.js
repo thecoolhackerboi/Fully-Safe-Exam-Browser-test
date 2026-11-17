@@ -63,8 +63,21 @@ async function main() {
     fs.mkdirSync(binDest1, { recursive: true });
     fs.mkdirSync(binDest2, { recursive: true });
     for (const f of fs.readdirSync(binSrc)) {
-      fs.copyFileSync(path.join(binSrc, f), path.join(binDest1, f));
-      fs.copyFileSync(path.join(binSrc, f), path.join(binDest2, f));
+      const srcFile = path.join(binSrc, f);
+      const safeCopy = (src, dest) => {
+        for (let attempt = 0; attempt < 5; attempt++) {
+          try {
+            fs.copyFileSync(src, dest);
+            return;
+          } catch (e) {
+            if (attempt === 4) console.warn('[pack-asar] Warning copying ' + f + ':', e.message);
+            const start = Date.now();
+            while (Date.now() - start < 200) {} // 200ms synchronous pause
+          }
+        }
+      };
+      safeCopy(srcFile, path.join(binDest1, f));
+      safeCopy(srcFile, path.join(binDest2, f));
     }
     console.log('[pack-asar] Synced native binaries to release/win-unpacked.');
   }

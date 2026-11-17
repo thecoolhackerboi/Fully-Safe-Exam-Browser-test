@@ -411,7 +411,7 @@ export class SebLoader {
 
     // Taskbar configuration
     const showTaskBar = dict['showTaskBar'] !== undefined ? Boolean(dict['showTaskBar']) : true;
-    const taskBarHeight = typeof dict['taskBarHeight'] === 'number' ? dict['taskBarHeight'] : 36;
+    const taskBarHeight = typeof dict['taskBarHeight'] === 'number' ? dict['taskBarHeight'] : 40;
     const showQuitButton = dict['showQuitButton'] !== undefined ? Boolean(dict['showQuitButton']) : true;
     const showReloadButton = dict['showReloadButton'] !== undefined ? Boolean(dict['showReloadButton']) : true;
     const showTime = dict['showTime'] !== undefined ? Boolean(dict['showTime']) : true;

@@ -192,11 +192,12 @@ body.phase-exam {
    ========================================================================== */
 .view-unconfigured {
   display: none;
-  background-color: #ebebeb;
-  height: calc(100vh - 36px);
+  background-color: #f7f7f7;
+  height: calc(100vh - 40px);
   width: 100vw;
   overflow-y: auto;
   color: #222222;
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
 }
 
 .view-unconfigured.active {
@@ -238,13 +239,14 @@ body.phase-exam {
   gap: 10px;
 }
 
-.seb-header-logo {
-  width: 34px;
-  height: 34px;
+.seb-header-logo-img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
 }
 
 .seb-header-title {
-  font-size: 18.5px;
+  font-size: 18px;
   font-weight: 600;
   color: #333333;
 }
@@ -344,6 +346,16 @@ body.phase-exam {
   cursor: pointer;
 }
 
+.seb-doc-icon-img {
+  width: 20px;
+  height: 20px;
+  vertical-align: middle;
+  cursor: pointer;
+  margin: 0 2px;
+  transition: transform 0.15s ease;
+}
+
+.seb-mini-icon:hover .seb-doc-icon-img,
 .seb-mini-icon:hover svg {
   transform: scale(1.15);
   transition: transform 0.15s ease;
@@ -475,7 +487,7 @@ body.phase-exam {
 }
 
 /* ==========================================================================
-   4. AUTHENTIC SAFE EXAM BROWSER BOTTOM TASKBAR (Matching Image 5 & 6)
+   4. AUTHENTIC SAFE EXAM BROWSER BOTTOM TASKBAR (Matching Image 1 & 2)
    ========================================================================== */
 .seb-taskbar {
   display: none;
@@ -483,24 +495,49 @@ body.phase-exam {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 36px;
-  background: #e0e0e0;
+  height: 40px;
+  background: #e1e1e1;
   border-top: 1px solid #c8c8c8;
   z-index: 99999;
   align-items: center;
   justify-content: space-between;
-  padding: 0 8px;
+  padding: 0 10px;
   user-select: none;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 
 .seb-taskbar.visible {
   display: flex !important;
 }
 
+.seb-taskbar-tab {
+  position: absolute;
+  bottom: 39px;
+  left: 8px;
+  background: #f7f7f7;
+  border: 1px solid #c8c8c8;
+  border-bottom: 1px solid #f7f7f7;
+  border-top-left-radius: 2px;
+  border-top-right-radius: 2px;
+  padding: 2px 10px 3px 10px;
+  font-size: 11px;
+  color: #333333;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  cursor: pointer;
+  box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.seb-taskbar-tab:hover {
+  background: #ffffff;
+}
+
 .seb-taskbar-left, .seb-taskbar-right {
   display: flex;
   align-items: center;
-  gap: 10px;
+}
+
+.seb-taskbar-left {
+  gap: 8px;
 }
 
 .seb-taskbar-seb-logo {
@@ -508,48 +545,83 @@ body.phase-exam {
   display: flex;
   align-items: center;
   padding: 2px 4px;
-  border-radius: 2px;
+  border-radius: 3px;
+  transition: background-color 0.15s ease;
 }
 
 .seb-taskbar-seb-logo:hover {
-  background: #d0d0d0;
+  background: #d4d4d4;
 }
 
-.seb-taskbar-icon {
+.seb-taskbar-logo-img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  display: block;
+}
+
+.seb-taskbar-right {
+  gap: 14px;
+  margin-right: 2px;
+}
+
+.seb-taskbar-battery {
   display: flex;
   align-items: center;
+  justify-content: center;
+  cursor: default;
 }
 
 .seb-taskbar-lang {
-  font-size: 11.5px;
-  color: #222222;
-  font-weight: 600;
-  padding: 0 4px;
-  letter-spacing: 0.5px;
+  font-size: 12px;
+  color: #111111;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  cursor: default;
+  font-family: 'Segoe UI', system-ui, sans-serif;
 }
 
-.seb-taskbar-clock {
-  font-size: 12px;
+.seb-taskbar-clock-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.15;
+  cursor: default;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+.seb-taskbar-time {
+  font-size: 11.5px;
   font-weight: 600;
   color: #111111;
   font-variant-numeric: tabular-nums;
-  padding: 0 4px;
+}
+
+.seb-taskbar-date {
+  font-size: 10.5px;
+  font-weight: 400;
+  color: #222222;
+  font-variant-numeric: tabular-nums;
+  margin-top: 1px;
 }
 
 .seb-quit-power-btn {
   background: transparent;
   border: none;
-  color: #333333;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 4px 6px;
-  border-radius: 2px;
-  transition: all 0.15s ease;
+  padding: 3px 5px;
+  border-radius: 3px;
+  transition: background-color 0.15s ease;
 }
 
 .seb-quit-power-btn:hover {
-  background: #dc2626;
-  color: #ffffff;
+  background-color: #cecece;
+}
+
+.seb-quit-power-btn:active {
+  background-color: #bcbcbc;
 }

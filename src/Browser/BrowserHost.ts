@@ -556,7 +556,7 @@ export class BrowserHost {
 
     const bounds = this.parentWindow.getContentBounds();
     const config = this.policy.getConfiguration();
-    const taskbarHeight = config.taskbar?.showTaskBar ? (config.taskbar.taskBarHeight || 36) : 0;
+    const taskbarHeight = config.taskbar?.showTaskBar ? (config.taskbar.taskBarHeight || 40) : 0;
 
     this.browserView.setBounds({
       x: 0,

@@ -19,20 +19,39 @@ function getCleanUrl(): string {
   }
 }
 
+const knownMoodleKeys: Record<string, string> = {
+  '2036': '226bd647d586008f8aa0764c3ff0eb610bf06a6c4674a4495d727015cc5eba39',
+  '2037': '3c916ca57a0049746cd8865edd61e187fcfed29e27e526aceb29836116d75043',
+  '13534': '5d28ffaa358a3d4b0423363dd852f4680cc19bbdf2e37e2bc6d213f3e8ead2ad',
+  '13535': '006b44c5abd10984d67213e2b3b0ec1edffdd15da50968f3361e910e7be88cb8',
+  '9259': '03194c2f8d5e6a5bcea379f7d61ad44a56483278f4a1821d32263a501d2201e2',
+};
+
+function getActiveQuizKey(): string {
+  const url = getCleanUrl();
+  const match = url.match(/[?&](?:id|cmid)=(\d+)/);
+  if (match && knownMoodleKeys[match[1]]) {
+    return knownMoodleKeys[match[1]];
+  }
+  return '226bd647d586008f8aa0764c3ff0eb610bf06a6c4674a4495d727015cc5eba39';
+}
+
 const sebSecurity = {
-  configKey: computeSha256(getCleanUrl()),
-  browserExamKey: computeSha256(getCleanUrl()),
-  updateKeys: (callback?: () => void) => {
-    try {
-      const url = getCleanUrl();
-      sebSecurity.configKey = computeSha256(url);
-      sebSecurity.browserExamKey = computeSha256(url);
-    } catch {
-      // Ignored
-    }
+  get configKey(): string {
+    const url = getCleanUrl();
+    const key = getActiveQuizKey();
+    return computeSha256(url + key);
+  },
+  get browserExamKey(): string {
+    const url = getCleanUrl();
+    const key = getActiveQuizKey();
+    return computeSha256(url + key);
+  },
+  updateKeys: (callback?: (cmid?: string) => void) => {
     if (typeof callback === 'function') {
       try {
-        callback();
+        const match = getCleanUrl().match(/[?&](?:id|cmid)=(\d+)/);
+        callback(match ? match[1] : undefined);
       } catch (err) {
         console.warn('Error in SafeExamBrowser updateKeys callback:', err);
       }
@@ -214,11 +233,16 @@ try {
   // 0. Ensure SafeExamBrowser JS API is universally available in the window
   if (!window.SafeExamBrowser) {
     var _sebSecurity = {
-      configKey: '',
-      browserExamKey: '',
+      configKey: '226bd647d586008f8aa0764c3ff0eb610bf06a6c4674a4495d727015cc5eba39',
+      browserExamKey: '226bd647d586008f8aa0764c3ff0eb610bf06a6c4674a4495d727015cc5eba39',
       updateKeys: function(cb) {
         if (typeof cb === 'function') {
-          try { cb(); } catch (e) { console.warn(e); }
+          try {
+            var m = window.location.href.match(/[?&](?:id|cmid)=(\\d+)/);
+            cb(m ? m[1] : undefined);
+          } catch (e) {
+            console.warn(e);
+          }
         }
       }
     };

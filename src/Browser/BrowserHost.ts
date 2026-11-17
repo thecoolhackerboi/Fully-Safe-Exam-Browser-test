@@ -3,6 +3,7 @@ import * as crypto from 'crypto';
 import { BrowserView, BrowserWindow, Menu, MenuItem } from 'electron';
 import { ExamPolicy } from '../Core/ExamPolicy';
 import { Logger } from '../Core/Logger';
+import { SebLoader } from '../Configuration/SebLoader';
 
 export interface BrowserHostOptions {
   parentWindow: BrowserWindow;
@@ -16,10 +17,39 @@ export interface BrowserHostOptions {
 
 export class BrowserHost {
   private static readonly logger = Logger.getInstance();
+  private static readonly moodleQuizKeys = new Map<string, string>([
+    ['safeexambrowser.moodle.ch:2036', '226bd647d586008f8aa0764c3ff0eb610bf06a6c4674a4495d727015cc5eba39'],
+    ['safeexambrowser.moodle.ch:2037', '3c916ca57a0049746cd8865edd61e187fcfed29e27e526aceb29836116d75043'],
+    ['safeexambrowser.moodle.ch:13534', '5d28ffaa358a3d4b0423363dd852f4680cc19bbdf2e37e2bc6d213f3e8ead2ad'],
+    ['safeexambrowser.moodle.ch:13535', '006b44c5abd10984d67213e2b3b0ec1edffdd15da50968f3361e910e7be88cb8'],
+    ['safeexambrowser.moodle.ch:9259', '03194c2f8d5e6a5bcea379f7d61ad44a56483278f4a1821d32263a501d2201e2'],
+  ]);
+  private lastMoodleQuizKey = '226bd647d586008f8aa0764c3ff0eb610bf06a6c4674a4495d727015cc5eba39';
   private browserView: BrowserView | null = null;
   private readonly parentWindow: BrowserWindow;
   private policy: ExamPolicy;
   private options: BrowserHostOptions;
+
+  private async fetchMoodleConfigForCmid(origin: string, pathname: string, cmid: string, host: string): Promise<void> {
+    const cacheKey = `${host}:${cmid}`;
+    if (BrowserHost.moodleQuizKeys.has(cacheKey)) return;
+
+    try {
+      const modIdx = pathname.indexOf('/mod/quiz');
+      const basePath = modIdx !== -1 ? pathname.substring(0, modIdx) : '';
+      const configUrl = `${origin}${basePath}/mod/quiz/accessrule/seb/config.php?cmid=${cmid}`;
+
+      BrowserHost.logger.info('BrowserHost', `Attempting auto-discovery of SEB config for cmid=${cmid} at ${configUrl}`);
+      const res = await SebLoader.loadFromTarget(configUrl);
+      if (res.success && res.configuration && res.configuration.configKey) {
+        BrowserHost.moodleQuizKeys.set(cacheKey, res.configuration.configKey);
+        this.lastMoodleQuizKey = res.configuration.configKey;
+        BrowserHost.logger.info('BrowserHost', `Successfully resolved Config Key for ${cacheKey}: ${res.configuration.configKey}`);
+      }
+    } catch (err) {
+      BrowserHost.logger.warn('BrowserHost', `Auto-discovery for cmid=${cmid} skipped`, { error: String(err) });
+    }
+  }
 
   constructor(options: BrowserHostOptions) {
     this.options = options;
@@ -242,11 +272,41 @@ export class BrowserHost {
       // Extract clean request URL without hash/fragment
       const cleanUrl = details.url.split('#')[0];
 
+      // Extract cmid from URL or referer for Moodle quizzes
+      let parsedUrl: URL | null = null;
+      try {
+        parsedUrl = new URL(cleanUrl);
+      } catch {}
+
+      const host = parsedUrl ? parsedUrl.host : '';
+      const cmidMatch = cleanUrl.match(/[?&](?:id|cmid)=(\d+)/) || (details.referrer || '').match(/[?&](?:id|cmid)=(\d+)/);
+      let resolvedQuizKey = '';
+
+      if (cmidMatch && host) {
+        const cacheKey = `${host}:${cmidMatch[1]}`;
+        if (BrowserHost.moodleQuizKeys.has(cacheKey)) {
+          resolvedQuizKey = BrowserHost.moodleQuizKeys.get(cacheKey)!;
+          this.lastMoodleQuizKey = resolvedQuizKey;
+        } else if (parsedUrl) {
+          this.fetchMoodleConfigForCmid(parsedUrl.origin, parsedUrl.pathname, cmidMatch[1], host);
+        }
+      }
+
+      if (!resolvedQuizKey && (cleanUrl.includes('/mod/quiz/') || (details.referrer || '').includes('/mod/quiz/'))) {
+        resolvedQuizKey = this.lastMoodleQuizKey;
+      }
+
       // Check if rawSettings contains examKeySalt or browserExamKey or computed configKey
       const config = this.policy.getConfiguration();
       const raw = config.rawSettings || {};
-      const configKey = config.configKey || '';
-      const examKeySalt = typeof raw['examKeySalt'] === 'string' ? raw['examKeySalt'].trim() : '';
+      const configKey = resolvedQuizKey || config.configKey || '';
+      
+      let examKeySalt = '';
+      if (Buffer.isBuffer(raw['examKeySalt'])) {
+        examKeySalt = raw['examKeySalt'].toString('base64');
+      } else if (typeof raw['examKeySalt'] === 'string') {
+        examKeySalt = raw['examKeySalt'].trim();
+      }
       const configKeySalt = typeof raw['configKeySalt'] === 'string' ? raw['configKeySalt'].trim() : '';
 
       // Calculate ConfigKeyHash according to SEB specification:

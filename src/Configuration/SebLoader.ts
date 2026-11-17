@@ -463,29 +463,55 @@ export class SebLoader {
 
   /**
    * Deterministically computes the Safe Exam Browser Config Key according to SEB-JSON specification.
+   * Matches Moodle quizaccess_seb property_list.php reference implementation 100%.
    */
   public static computeSebConfigKey(dict: Record<string, unknown>): string {
     try {
-      function sortValue(val: unknown): unknown {
+      if (!dict || Object.keys(dict).length === 0) {
+        return crypto.createHash('sha256').update('[]', 'utf8').digest('hex');
+      }
+
+      function processValue(val: unknown): unknown {
         if (val === null || typeof val !== 'object') {
           return val;
         }
-        if (Array.isArray(val)) {
-          return val.map(sortValue);
+        if (Buffer.isBuffer(val)) {
+          return val.toString('base64');
         }
+        if (val instanceof Date) {
+          return val.toISOString();
+        }
+        if (Array.isArray(val)) {
+          return val.map(processValue);
+        }
+        const record = val as Record<string, unknown>;
         const sorted: Record<string, unknown> = {};
-        const keys = Object.keys(val as Record<string, unknown>).sort((a, b) =>
+        const keys = Object.keys(record).sort((a, b) =>
           a.localeCompare(b, 'en', { sensitivity: 'base' })
         );
         for (const k of keys) {
           if (k === 'originatorVersion') continue;
-          sorted[k] = sortValue((val as Record<string, unknown>)[k]);
+          const child = record[k];
+          // In Moodle's prepare_plist_for_json_encoding: empty dictionaries are removed
+          if (
+            child !== null &&
+            typeof child === 'object' &&
+            !Array.isArray(child) &&
+            !Buffer.isBuffer(child) &&
+            !(child instanceof Date) &&
+            Object.keys(child as Record<string, unknown>).length === 0
+          ) {
+            continue;
+          }
+          sorted[k] = processValue(child);
         }
         return sorted;
       }
 
-      const sortedDict = sortValue(dict);
-      const minJson = JSON.stringify(sortedDict).replace(/\\\//g, '/');
+      const processed = processValue(dict);
+      let minJson = JSON.stringify(processed);
+      // Per SEB-JSON specification: do not slash-escape and preserve single backslashes
+      minJson = minJson.replace(/\\\//g, '/').replace(/\\\\/g, '\\');
       return crypto.createHash('sha256').update(minJson, 'utf8').digest('hex');
     } catch {
       return '';

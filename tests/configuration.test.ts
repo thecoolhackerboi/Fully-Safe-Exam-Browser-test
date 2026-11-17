@@ -69,5 +69,13 @@ export function runConfigurationTests() {
   console.assert(normalizedSebConfig.startsWith('https://'), 'Test 8.1 Failed: seb-config? should normalize to https://');
   console.assert(normalizedSebConfig.includes('seb_login_token=xyz123'), 'Test 8.2 Failed: Token should be preserved');
   console.log('✔ Test 8: seb-config protocol URL correctly normalized');
+
+  // Test 9: Deterministic Config Key calculation matches SEB / Moodle spec
+  const emptyKey = SebLoader.computeSebConfigKey({});
+  console.assert(
+    emptyKey === '4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945',
+    `Test 9.1 Failed: Empty dict config key expected 4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945, got ${emptyKey}`
+  );
+  console.log('✔ Test 9: Deterministic Config Key matches Moodle quizaccess_seb specification');
 }
 

@@ -73,7 +73,7 @@ const sebSecurity = {
 };
 
 const sebApi = {
-  version: '3.10.2',
+  version: '3.10.2.920',
   platform: 'Windows',
   security: sebSecurity,
 };
@@ -262,7 +262,7 @@ try {
     try {
       Object.defineProperty(window, 'SafeExamBrowser', {
         value: {
-          version: '3.10.2',
+          version: '3.10.2.920',
           platform: 'Windows',
           security: _sebSecurity
         },
@@ -271,7 +271,7 @@ try {
       });
     } catch (e) {
       window.SafeExamBrowser = {
-        version: '3.10.2',
+        version: '3.10.2.920',
         platform: 'Windows',
         security: _sebSecurity
       };

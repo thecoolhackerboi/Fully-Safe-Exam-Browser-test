@@ -254,8 +254,8 @@ export class BrowserHost {
 
     BrowserHost.logger.info('BrowserHost', 'Initializing Chromium BrowserHost with Safe Exam Browser emulation...');
 
-    const sebVer = this.policy.getConfiguration().compatibility.sebVersion || '3.10.2';
-    const customUserAgent = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 SEB/${sebVer}`;
+    const sebVer = this.policy.getConfiguration().compatibility.sebVersion || '3.10.2.920';
+    const customUserAgent = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 SEB/${sebVer} SEB`;
 
     this.browserView = new BrowserView({
       webPreferences: {

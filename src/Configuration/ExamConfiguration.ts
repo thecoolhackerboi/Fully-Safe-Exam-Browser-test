@@ -142,7 +142,7 @@ export const DEFAULT_EXAM_CONFIGURATION: ExamConfiguration = {
     quitUrl: '/quit-seb',
   },
   compatibility: {
-    sebVersion: '3.10.2',
-    platform: 'SEB_Windows_3.10.2',
+    sebVersion: '3.10.2.920',
+    platform: 'SEB_Windows_3.10.2.920',
   },
 };

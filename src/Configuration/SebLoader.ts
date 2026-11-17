@@ -450,8 +450,8 @@ export class SebLoader {
         quitUrl,
       },
       compatibility: {
-        sebVersion: '3.10.2',
-        platform: 'SEB_Windows_3.10.2',
+        sebVersion: '3.10.2.920',
+        platform: 'SEB_Windows_3.10.2.920',
       },
       windowSwitching: dict['windowSwitching'] !== undefined ? Boolean(dict['windowSwitching']) : true,
       examTitle,

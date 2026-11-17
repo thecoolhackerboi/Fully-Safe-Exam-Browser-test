@@ -1,4 +1,4 @@
-import { contextBridge, webFrame } from 'electron';
+import { contextBridge, webFrame, ipcRenderer } from 'electron';
 import * as crypto from 'crypto';
 
 function computeSha256(text: string): string {
@@ -27,11 +27,24 @@ const knownMoodleKeys: Record<string, string> = {
   '9259': '03194c2f8d5e6a5bcea379f7d61ad44a56483278f4a1821d32263a501d2201e2',
 };
 
+let cachedActiveKey = '';
+
 function getActiveQuizKey(): string {
   const url = getCleanUrl();
   const match = url.match(/[?&](?:id|cmid)=(\d+)/);
   if (match && knownMoodleKeys[match[1]]) {
     return knownMoodleKeys[match[1]];
+  }
+  try {
+    const fromMain = ipcRenderer.sendSync('fseb:get-active-config-key', url);
+    if (typeof fromMain === 'string' && fromMain.trim().length > 0) {
+      cachedActiveKey = fromMain.trim();
+      return cachedActiveKey;
+    }
+  } catch {}
+
+  if (cachedActiveKey) {
+    return cachedActiveKey;
   }
   return '226bd647d586008f8aa0764c3ff0eb610bf06a6c4674a4495d727015cc5eba39';
 }

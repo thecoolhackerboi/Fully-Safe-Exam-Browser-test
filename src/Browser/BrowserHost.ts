@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as crypto from 'crypto';
-import { BrowserView, BrowserWindow, Menu, MenuItem } from 'electron';
+import { BrowserView, BrowserWindow, Menu, MenuItem, ipcMain } from 'electron';
 import { ExamPolicy } from '../Core/ExamPolicy';
 import { Logger } from '../Core/Logger';
 import { SebLoader } from '../Configuration/SebLoader';
@@ -51,10 +51,45 @@ export class BrowserHost {
     }
   }
 
+  public getActiveConfigKeyForUrl(url: string): string {
+    const cleanUrl = (url || '').split('#')[0];
+    let parsedUrl: URL | null = null;
+    try {
+      parsedUrl = new URL(cleanUrl);
+    } catch {}
+
+    const host = parsedUrl ? parsedUrl.host : '';
+    const cmidMatch = cleanUrl.match(/[?&](?:id|cmid)=(\d+)/);
+
+    if (cmidMatch && host) {
+      const cacheKey = `${host}:${cmidMatch[1]}`;
+      if (BrowserHost.moodleQuizKeys.has(cacheKey)) {
+        return BrowserHost.moodleQuizKeys.get(cacheKey)!;
+      }
+    }
+
+    const config = this.policy.getConfiguration();
+    if (config.configKey) {
+      return config.configKey;
+    }
+
+    if (this.lastMoodleQuizKey && cleanUrl.includes('/mod/quiz/')) {
+      return this.lastMoodleQuizKey;
+    }
+
+    return '';
+  }
+
   constructor(options: BrowserHostOptions) {
     this.options = options;
     this.parentWindow = options.parentWindow;
     this.policy = options.policy;
+
+    // Remove any previously attached handler to prevent duplicate listener warnings
+    ipcMain.removeAllListeners('fseb:get-active-config-key');
+    ipcMain.on('fseb:get-active-config-key', (event, url) => {
+      event.returnValue = this.getActiveConfigKeyForUrl(url);
+    });
   }
 
   public getWebContents() {

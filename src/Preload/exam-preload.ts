@@ -1,17 +1,57 @@
 import { contextBridge, webFrame } from 'electron';
+import * as crypto from 'crypto';
 
-// Expose SafeExamBrowser object expected by assessment platforms (CodeChef, Moodle, etc.)
+function computeSha256(text: string): string {
+  try {
+    return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
+  } catch {
+    return '';
+  }
+}
+
+function getCleanUrl(): string {
+  try {
+    return (typeof window !== 'undefined' && window.location && window.location.href)
+      ? window.location.href.split('#')[0]
+      : '';
+  } catch {
+    return '';
+  }
+}
+
+const sebSecurity = {
+  configKey: computeSha256(getCleanUrl()),
+  browserExamKey: computeSha256(getCleanUrl()),
+  updateKeys: (callback?: () => void) => {
+    try {
+      const url = getCleanUrl();
+      sebSecurity.configKey = computeSha256(url);
+      sebSecurity.browserExamKey = computeSha256(url);
+    } catch {
+      // Ignored
+    }
+    if (typeof callback === 'function') {
+      try {
+        callback();
+      } catch (err) {
+        console.warn('Error in SafeExamBrowser updateKeys callback:', err);
+      }
+    }
+  },
+};
+
+const sebApi = {
+  version: '3.10.2',
+  platform: 'Windows',
+  security: sebSecurity,
+};
+
+// Expose SafeExamBrowser object expected by assessment platforms (CodeChef, Moodle quizaccess_seb, etc.)
 try {
-  contextBridge.exposeInMainWorld('SafeExamBrowser', {
-    version: 'SEB_Windows_3.10.2',
-    platform: 'Windows',
-  });
+  contextBridge.exposeInMainWorld('SafeExamBrowser', sebApi);
 } catch (err) {
   try {
-    (window as unknown as { SafeExamBrowser: unknown }).SafeExamBrowser = {
-      version: 'SEB_Windows_3.10.2',
-      platform: 'Windows',
-    };
+    (window as unknown as { SafeExamBrowser: unknown }).SafeExamBrowser = sebApi;
   } catch {
     // Ignored
   }

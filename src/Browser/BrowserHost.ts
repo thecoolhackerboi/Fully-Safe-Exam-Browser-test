@@ -1,4 +1,5 @@
 import * as path from 'path';
+import * as crypto from 'crypto';
 import { BrowserView, BrowserWindow, Menu, MenuItem } from 'electron';
 import { ExamPolicy } from '../Core/ExamPolicy';
 import { Logger } from '../Core/Logger';
@@ -229,6 +230,31 @@ export class BrowserHost {
         return true;
       }
       return false;
+    });
+
+    // Intercept and inject authentic Safe Exam Browser HTTP request headers
+    session.webRequest.onBeforeSendHeaders((details, callback) => {
+      const requestHeaders = { ...details.requestHeaders };
+
+      // Ensure User-Agent reflects authentic Safe Exam Browser
+      requestHeaders['User-Agent'] = customUserAgent;
+
+      // Extract clean request URL without hash/fragment
+      const cleanUrl = details.url.split('#')[0];
+
+      // Check if rawSettings contains examKeySalt or browserExamKey
+      const config = this.policy.getConfiguration();
+      const raw = config.rawSettings || {};
+      const examKeySalt = typeof raw['examKeySalt'] === 'string' ? raw['examKeySalt'].trim() : '';
+      const configKeySalt = typeof raw['configKeySalt'] === 'string' ? raw['configKeySalt'].trim() : '';
+
+      const reqHash = crypto.createHash('sha256').update(cleanUrl + examKeySalt, 'utf8').digest('hex');
+      const confHash = crypto.createHash('sha256').update(cleanUrl + configKeySalt, 'utf8').digest('hex');
+
+      requestHeaders['X-SafeExamBrowser-RequestHash'] = reqHash;
+      requestHeaders['X-SafeExamBrowser-ConfigKeyHash'] = confHash;
+
+      callback({ requestHeaders });
     });
 
     // Intercept and sanitize response headers to permit embedded container editors and iframes
